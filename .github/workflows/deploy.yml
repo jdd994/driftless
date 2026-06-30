@@ -1,0 +1,57 @@
+name: Deploy
+
+# Auto-deploy on every push to main:
+#   • builds the app and publishes it to Cloudflare Pages
+#   • deploys the sync Worker (server/)
+#
+# Requires ONE GitHub repo secret:
+#   CLOUDFLARE_API_TOKEN — an API token with these Account permissions:
+#     Cloudflare Pages: Edit · Workers Scripts: Edit · D1: Edit
+# The account id is not a secret, so it's set directly below.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # lets you trigger a deploy by hand from the Actions tab
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: e3a2a849312407ae9125cee687cd2407
+
+jobs:
+  app:
+    name: App → Cloudflare Pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Deploy to Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=driftless
+
+  server:
+    name: Sync Worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: server
+          command: deploy
