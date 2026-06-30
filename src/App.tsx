@@ -1,0 +1,293 @@
+// App.tsx
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useJournal } from "./hooks/useJournal";
+import { allTags, filterEntries, toMarkdown, type Entry, type Strand } from "./lib/journal";
+import { LockScreen } from "./components/LockScreen";
+import { Capture } from "./components/Capture";
+import { Toolbar } from "./components/Toolbar";
+import { TagBar } from "./components/TagBar";
+import { Stream } from "./components/Stream";
+import { Timeline } from "./components/Timeline";
+import { StrandsView } from "./components/StrandsView";
+import { HelpSheet } from "./components/HelpSheet";
+import { Toast, type ToastData } from "./components/Toast";
+
+function Clock() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const now = new Date();
+  const date = now.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+  const time = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="clock">
+      {date} · <span className="now">{time}</span>
+    </div>
+  );
+}
+
+export default function App() {
+  const j = useJournal();
+  const [query, setQuery] = useState("");
+  const [tag, setTag] = useState<string | null>(null);
+  const [view, setView] = useState<"stream" | "timeline" | "strands">("stream");
+  const [showHelp, setShowHelp] = useState(false);
+  const [toast, setToast] = useState<ToastData>(null);
+  const toastTimer = useRef<number | null>(null);
+
+  function showToast(data: ToastData) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(data);
+    toastTimer.current = window.setTimeout(() => setToast(null), 5000);
+  }
+
+  const tags = useMemo(() => allTags(j.entries), [j.entries]);
+  const visible = useMemo(
+    () => filterEntries(j.entries, query, tag),
+    [j.entries, query, tag]
+  );
+
+  // Keep tag filter valid if the underlying tag disappears.
+  useEffect(() => {
+    if (tag && !tags.includes(tag)) setTag(null);
+  }, [tags, tag]);
+
+  // A failed save must never be silent — surface it with a retry.
+  useEffect(() => {
+    if (j.saveError) {
+      showToast({
+        msg: j.saveError.message,
+        action: { label: "Retry", fn: j.saveError.retry },
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [j.saveError]);
+
+  if (j.vaultState === "loading") {
+    return (
+      <div className="wrap">
+        <div className="empty">
+          <p>Opening…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (j.vaultState !== "open") {
+    return (
+      <LockScreen
+        mode={j.vaultState}
+        enrolled={j.bioEnrolled}
+        onCreate={j.createVault}
+        onUnlock={j.unlock}
+        onBiometric={j.biometricUnlock}
+        onRestore={j.restoreBackup}
+      />
+    );
+  }
+
+  function handleDelete(id: string) {
+    const removed = j.entries.find((e) => e.id === id);
+    if (!removed) return;
+    j.removeEntry(removed);
+    showToast({
+      msg: "Thought removed.",
+      action: { label: "Undo", fn: () => j.restoreEntry(removed) },
+    });
+  }
+
+  function download(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  const today = () => new Date().toISOString().slice(0, 10);
+
+  function handleExport() {
+    if (j.entries.length === 0) {
+      showToast({ msg: "Nothing to export yet." });
+      return;
+    }
+    download(
+      new Blob([toMarkdown(j.entries)], { type: "text/markdown" }),
+      "journal-" + today() + ".md"
+    );
+  }
+
+  async function handleBiometricToggle() {
+    if (j.bioEnrolled) {
+      await j.disableBiometric();
+      showToast({ msg: "Quick unlock turned off for this device." });
+    } else {
+      const ok = await j.enableBiometric();
+      showToast({
+        msg: ok
+          ? "Quick unlock is on for this device."
+          : "This device can't set up quick unlock — your passphrase still works.",
+      });
+    }
+  }
+
+  function handleToggleStrand(strandId: string, entryId: string, add: boolean) {
+    if (add) j.addToStrand(strandId, entryId);
+    else j.removeFromStrand(strandId, entryId);
+  }
+
+  async function handleCreateStrandWith(title: string, entryId: string) {
+    const s = await j.createStrand(title);
+    j.addToStrand(s.id, entryId);
+    showToast({ msg: `Added to “${s.title || "Untitled"}”.` });
+  }
+
+  function handleExportStrand(strand: Strand, ordered: Entry[]) {
+    let md = `# ${strand.title || "Untitled"}\n\n`;
+    for (const e of ordered) md += `${e.text}\n\n`;
+    download(new Blob([md], { type: "text/markdown" }), "strand-" + today() + ".md");
+  }
+
+  async function handleBackup() {
+    const backup = await j.exportBackup();
+    if (!backup || backup.entries.length === 0) {
+      showToast({ msg: "Nothing to back up yet." });
+      return;
+    }
+    download(
+      new Blob([JSON.stringify(backup)], { type: "application/json" }),
+      "driftless-backup-" + today() + ".json"
+    );
+    showToast({ msg: "Backup saved. Keep it somewhere safe." });
+  }
+
+  return (
+    <div className="wrap">
+      <header className="top">
+        <div className="brand">
+          Driftless<span className="dot">.</span>
+        </div>
+        <div className="top-right">
+          <Clock />
+          <button
+            className="lock-link help-link"
+            onClick={() => setShowHelp(true)}
+            title="How Driftless works"
+            aria-label="Help"
+          >
+            ?
+          </button>
+          {j.bioSupported && (
+            <button
+              className="lock-link"
+              onClick={handleBiometricToggle}
+              title="Biometric unlock for this device"
+            >
+              {j.bioEnrolled ? "Quick unlock on" : "Quick unlock"}
+            </button>
+          )}
+          <button className="lock-link" onClick={j.lock} title="Lock the journal">
+            Lock
+          </button>
+        </div>
+      </header>
+
+      <Capture onKeep={j.addEntry} />
+
+      <div className="viewtabs" role="tablist">
+        <button
+          role="tab"
+          aria-selected={view === "stream"}
+          className={"viewtab" + (view === "stream" ? " active" : "")}
+          onClick={() => setView("stream")}
+        >
+          Stream
+        </button>
+        <button
+          role="tab"
+          aria-selected={view === "timeline"}
+          className={"viewtab" + (view === "timeline" ? " active" : "")}
+          onClick={() => setView("timeline")}
+        >
+          Timeline
+        </button>
+        <button
+          role="tab"
+          aria-selected={view === "strands"}
+          className={"viewtab" + (view === "strands" ? " active" : "")}
+          onClick={() => setView("strands")}
+        >
+          Strands
+        </button>
+      </div>
+
+      {view === "stream" && (
+        <>
+          <Toolbar
+            query={query}
+            onQuery={setQuery}
+            onExport={handleExport}
+            onBackup={handleBackup}
+          />
+          <TagBar
+            tags={tags}
+            active={tag}
+            onToggle={(t) => setTag((cur) => (cur === t ? null : t))}
+          />
+          <Stream
+            entries={visible}
+            totalCount={j.entries.length}
+            onSave={j.updateEntry}
+            onDelete={handleDelete}
+            onAnchor={j.setAnchor}
+            strands={j.strands}
+            onToggleStrand={handleToggleStrand}
+            onCreateStrandWith={handleCreateStrandWith}
+          />
+        </>
+      )}
+
+      {view === "timeline" && (
+        <Timeline
+          entries={j.entries}
+          onSave={j.updateEntry}
+          onDelete={handleDelete}
+          onAnchor={j.setAnchor}
+          strands={j.strands}
+          onToggleStrand={handleToggleStrand}
+          onCreateStrandWith={handleCreateStrandWith}
+        />
+      )}
+
+      {view === "strands" && (
+        <StrandsView
+          strands={j.strands}
+          entries={j.entries}
+          onCreate={j.createStrand}
+          onRename={j.renameStrand}
+          onDelete={j.deleteStrand}
+          onAddTo={j.addToStrand}
+          onRemoveFrom={j.removeFromStrand}
+          onReorder={j.reorderStrand}
+          onWriteIn={j.writeInStrand}
+          onSaveEntry={j.updateEntry}
+          onDeleteEntry={handleDelete}
+          onAnchor={j.setAnchor}
+          onExport={handleExportStrand}
+        />
+      )}
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
+      {showHelp && <HelpSheet onClose={() => setShowHelp(false)} />}
+    </div>
+  );
+}

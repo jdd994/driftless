@@ -1,0 +1,20 @@
+{
+  "name": "driftless-server",
+  "private": true,
+  "type": "module",
+  "description": "Driftless sync server — stores opaque ciphertext only. See ../SYNC_PLAN.md.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute driftless --remote --file=schema.sql",
+    "db:init:local": "wrangler d1 execute driftless --local --file=schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "typescript": "^5.5.3",
+    "wrangler": "^3.95.0"
+  }
+}

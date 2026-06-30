@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- warm near-black tile -->
+  <rect width="512" height="512" rx="112" fill="#16130F"/>
+  <!-- crescent: an amber disk with a tile-coloured bite taken out -->
+  <circle cx="248" cy="256" r="146" fill="#E0A33E"/>
+  <circle cx="312" cy="212" r="140" fill="#16130F"/>
+  <!-- a small cream star resting in the opening of the crescent -->
+  <path fill="#EFE7D6"
+    d="M350 152 L356 174 L378 180 L356 186 L350 208 L344 186 L322 180 L344 174 Z"/>
+</svg>

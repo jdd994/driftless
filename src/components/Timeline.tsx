@@ -1,0 +1,91 @@
+// Timeline.tsx
+// The "lived time" lens: thoughts that have been given an anchor, arranged by
+// when they happened (not when they were written). Dated anchors group by year,
+// ascending; era-labelled anchors collect at the end as "unplaced".
+import { timelineGroups, type Entry, type Anchor, type Strand } from "../lib/journal";
+import { EntryItem } from "./EntryItem";
+
+type Props = {
+  entries: Entry[];
+  onSave: (id: string, text: string) => void;
+  onDelete: (id: string) => void;
+  onAnchor: (id: string, anchor: Anchor | null) => void;
+  strands: Strand[];
+  onToggleStrand: (strandId: string, entryId: string, add: boolean) => void;
+  onCreateStrandWith: (title: string, entryId: string) => void;
+};
+
+export function Timeline({
+  entries,
+  onSave,
+  onDelete,
+  onAnchor,
+  strands,
+  onToggleStrand,
+  onCreateStrandWith,
+}: Props) {
+  const { dated, undated } = timelineGroups(entries);
+
+  if (dated.length === 0 && undated.length === 0) {
+    return (
+      <div className="empty">
+        <div className="mark">⟡</div>
+        <p>
+          Nothing placed in time yet.
+          <br />
+          Open a thought and “Place in time” to set when it happened.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <main className="stream timeline" aria-live="polite">
+      {dated.map((g) => (
+        <section className="daygroup" key={g.key}>
+          <div className="dayhead">
+            <span className="label">{g.label}</span>
+            <span className="rule" />
+          </div>
+          {g.entries.map((e) => (
+            <EntryItem
+              key={e.id}
+              entry={e}
+              recent={false}
+              displayTime=""
+              onSave={onSave}
+              onDelete={onDelete}
+              onAnchor={onAnchor}
+              strands={strands}
+              onToggleStrand={onToggleStrand}
+              onCreateStrandWith={onCreateStrandWith}
+            />
+          ))}
+        </section>
+      ))}
+
+      {undated.length > 0 && (
+        <section className="daygroup">
+          <div className="dayhead">
+            <span className="label">Unplaced eras</span>
+            <span className="rule" />
+          </div>
+          {undated.map((e) => (
+            <EntryItem
+              key={e.id}
+              entry={e}
+              recent={false}
+              displayTime=""
+              onSave={onSave}
+              onDelete={onDelete}
+              onAnchor={onAnchor}
+              strands={strands}
+              onToggleStrand={onToggleStrand}
+              onCreateStrandWith={onCreateStrandWith}
+            />
+          ))}
+        </section>
+      )}
+    </main>
+  );
+}
