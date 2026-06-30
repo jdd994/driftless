@@ -70,3 +70,14 @@ src/
 Cross-device sync. The app is local-first today: rock-solid on one device,
 offline-ready, encrypted. Syncing across devices is the next chapter and needs a
 deliberate backend choice — see the roadmap in `CLAUDE.md`.
+
+## License
+
+Driftless is free software under the **GNU Affero General Public License v3.0**
+(see `LICENSE`). That choice is deliberate and part of the point: a tool that
+promises "no one, not even us, can read your journal" should be **verifiable, not
+taken on faith.** The full source is open so anyone can audit the encryption,
+and the AGPL guarantees that Driftless — and every fork or hosted version of it —
+**stays free and open**, forever. Verify us; don't just trust us.
+
+Copyright (C) 2026 Driftless contributors.
