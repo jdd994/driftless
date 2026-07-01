@@ -1,20 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg:        #16130F;
-  --bg-raised: #1F1B15;
-  --surface:   #262019;
-  --surface-2: #2E2820;
-  --line:      #3A3225;
-  --line-soft: #2B251D;
-  --ink:       #EFE7D6;
-  --ink-soft:  #B8AD97;
-  --ink-faint: #7C725F;
-  --amber:     #E0A33E;
-  --amber-dim: rgba(224, 163, 62, 0.14);
-  --tag:       #8FB0A6;
-  --tag-dim:   rgba(143, 176, 166, 0.13);
-  --danger:    #D08770;
+  /* Lamplight — warm, dim, nothing abrasive. Softer/warmer than before:
+     deeper warm-black grounds, a gentler ivory for text (less bright),
+     a mellower amber, and a warmed sage so no color reads cold. */
+  --bg:        #14110B;
+  --bg-raised: #1C1811;
+  --surface:   #241E15;
+  --surface-2: #2C2419;
+  --line:      #37301F;
+  --line-soft: #282218;
+  --ink:       #E7DCC7;
+  --ink-soft:  #B4A98F;
+  --ink-faint: #786E5B;
+  --amber:     #DBA14A;
+  --amber-dim: rgba(219, 161, 74, 0.14);
+  --tag:       #9EAD91;
+  --tag-dim:   rgba(158, 173, 145, 0.13);
+  --danger:    #CD8670;
 
   --serif: 'Newsreader', Georgia, 'Times New Roman', serif;
   --sans:  'Inter', system-ui, -apple-system, sans-serif;
@@ -40,8 +43,22 @@ html, body, #root {
 
 body {
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(224, 163, 62, 0.06), transparent 60%),
+    radial-gradient(120% 80% at 50% -10%, rgba(219, 161, 74, 0.06), transparent 60%),
     var(--bg);
+}
+
+/* Auto night-dimming: a warm veil that deepens late and lifts by day. Opacity
+   is set from the local clock in App; pointer-events off so it never blocks. */
+.night-veil {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: rgb(28, 16, 5);
+  z-index: 100;
+  transition: opacity 2.5s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .night-veil { transition: none; }
 }
 
 .wrap {

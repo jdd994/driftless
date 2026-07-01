@@ -40,7 +40,27 @@ export default function App() {
   const [view, setView] = useState<"stream" | "timeline" | "strands">("stream");
   const [help, setHelp] = useState<null | "top" | "support">(null);
   const [toast, setToast] = useState<ToastData>(null);
+  const [veil, setVeil] = useState(0);
   const toastTimer = useRef<number | null>(null);
+
+  // Auto night-dimming: warm veil follows the local clock — 0 at midday,
+  // deepest around 1am — so the app is never harsh at 3am.
+  useEffect(() => {
+    const compute = () => {
+      const now = new Date();
+      const h = now.getHours() + now.getMinutes() / 60;
+      const dayness = Math.cos(((h - 13) / 24) * 2 * Math.PI); // 1 at 13:00, -1 at 1:00
+      setVeil(Math.max(0, (0.14 * (1 - dayness)) / 2));
+    };
+    compute();
+    const id = window.setInterval(compute, 5 * 60 * 1000);
+    const onVis = () => document.visibilityState === "visible" && compute();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, []);
 
   function showToast(data: ToastData) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -297,6 +317,7 @@ export default function App() {
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       {help && <HelpSheet focus={help} onClose={() => setHelp(null)} />}
+      <div className="night-veil" style={{ opacity: veil }} aria-hidden="true" />
     </div>
   );
 }
