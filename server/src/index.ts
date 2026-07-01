@@ -39,6 +39,106 @@ async function requireAuth(c: AppContext, next: Next) {
 
 app.get("/health", (c) => c.json({ ok: true, service: "driftless-server" }));
 
+// ---- Sync (Phase 3) ------------------------------------------------------
+// The server stores each entry's ciphertext + metadata and assigns a per-user
+// monotonic `seq`. Push upserts with last-write-wins by updatedAt; pull returns
+// everything with seq greater than the client's cursor. No plaintext is ever
+// seen — content is an opaque CipherBlob.
+
+const PULL_LIMIT = 500;
+const MAX_PUSH = 1000;
+
+// SQLite upsert that applies last-write-wins: an incoming row only overwrites a
+// stored one when its updatedAt is newer-or-equal. created_at is preserved.
+const UPSERT_ENTRY = `
+INSERT INTO entries (user_id, id, created_at, updated_at, deleted, content, seq)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(user_id, id) DO UPDATE SET
+  updated_at = excluded.updated_at,
+  deleted    = excluded.deleted,
+  content    = excluded.content,
+  seq        = excluded.seq
+WHERE excluded.updated_at >= entries.updated_at`;
+
+function isCipherBlob(x: any): boolean {
+  return x && Array.isArray(x.iv) && Array.isArray(x.data);
+}
+function validChange(ch: any): boolean {
+  return (
+    ch &&
+    typeof ch.id === "string" &&
+    typeof ch.createdAt === "number" &&
+    typeof ch.updatedAt === "number" &&
+    typeof ch.deleted === "boolean" &&
+    isCipherBlob(ch.content)
+  );
+}
+async function maxSeq(db: D1Database, userId: string): Promise<number> {
+  const r = await db
+    .prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM entries WHERE user_id = ?")
+    .bind(userId)
+    .first<{ m: number }>();
+  return r?.m ?? 0;
+}
+
+app.post("/sync/push", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json().catch(() => null);
+  const changes = body?.changes;
+  if (!Array.isArray(changes)) return c.json({ error: "changes must be an array" }, 400);
+  if (changes.length > MAX_PUSH) return c.json({ error: `too many changes (max ${MAX_PUSH})` }, 400);
+  for (const ch of changes) {
+    if (!validChange(ch)) return c.json({ error: "malformed change" }, 400);
+  }
+
+  let applied = 0;
+  if (changes.length > 0) {
+    const base = await maxSeq(c.env.DB, userId);
+    const stmts = changes.map((ch, i) =>
+      c.env.DB.prepare(UPSERT_ENTRY).bind(
+        userId,
+        ch.id,
+        ch.createdAt,
+        ch.updatedAt,
+        ch.deleted ? 1 : 0,
+        JSON.stringify(ch.content),
+        base + i + 1
+      )
+    );
+    const res = await c.env.DB.batch(stmts);
+    // meta.changes is 0 for rows skipped by the last-write-wins WHERE clause.
+    applied = res.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
+  }
+  return c.json({ applied, cursor: await maxSeq(c.env.DB, userId) });
+});
+
+app.get("/sync/pull", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const since = Math.max(0, Number(c.req.query("since") ?? "0") || 0);
+  const rows = await c.env.DB.prepare(
+    "SELECT id, created_at, updated_at, deleted, content, seq FROM entries WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?"
+  )
+    .bind(userId, since, PULL_LIMIT)
+    .all<{
+      id: string;
+      created_at: number;
+      updated_at: number;
+      deleted: number;
+      content: string;
+      seq: number;
+    }>();
+  const results = rows.results ?? [];
+  const changes = results.map((r) => ({
+    id: r.id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deleted: r.deleted === 1,
+    content: JSON.parse(r.content),
+  }));
+  const cursor = results.length ? results[results.length - 1].seq : since;
+  return c.json({ changes, cursor, more: results.length === PULL_LIMIT });
+});
+
 // Create an account + store the vault metadata and identity public key.
 app.post("/auth/register", async (c) => {
   const body = await c.req.json().catch(() => null);

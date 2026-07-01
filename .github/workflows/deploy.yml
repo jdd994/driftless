@@ -39,10 +39,6 @@ jobs:
   server:
     name: Sync Worker
     runs-on: ubuntu-latest
-    # The Worker can't publish until a workers.dev subdomain is registered, and
-    # the app doesn't use it yet — so don't let this fail the whole run for now.
-    # Remove once the subdomain is set and the server is in use.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
