@@ -1,8 +1,10 @@
 # Sync plan — Driftless
 
-Status: **planned, not started.** Backend decided (CLAUDE.md roadmap #1): a tiny
-custom server, candidate host **Cloudflare Workers + D1**. This document is the
-build spec. It exists to be edited as we learn.
+Status: **Phases 1–3 done; Phase 4 (client wiring) next.** Backend: a tiny
+custom server on **Cloudflare Workers + D1**, live at
+`https://driftless-server.jdd994.workers.dev` (accounts, vault, key directory,
+and sync push/pull — all verified with curl). The client does **not** talk to it
+yet; that's Phase 4. This document is the build spec, edited as we learn.
 
 > **Why sync is the gateway.** The longer-term vision (see the
 > "Sharing & family strands" appendix below, and the `sharing-family-vision`
@@ -154,14 +156,17 @@ later, move `updatedAt` to a logical per-record version counter and encrypt
 
 ## Phasing (each phase is shippable; capture never breaks)
 
-1. **Client groundwork, no server.** Add `deleted` + `dirty` + `sync` store + DB
+1. ✅ **Client groundwork, no server.** Add `deleted` + `dirty` + `sync` store + DB
    v2 migration; soft-delete; `loadEntries` filters tombstones. No user-visible
-   change, but now sync-ready. Low risk.
-2. **Server skeleton.** Workers + D1, schema (incl. `users.identity_pub`),
-   `/auth/register`, `/auth/login`, `/vault`, `/keys`. Client generates the
-   identity keypair at signup and uploads the public key. Verify with curl.
-3. **Sync endpoints.** `/sync/push`, `/sync/pull` with LWW + `seq` cursor. Verify
-   with curl.
+   change, but now sync-ready. Low risk. **(done)**
+2. ✅ **Server skeleton.** Workers + D1, schema (incl. `users.identity_pub`),
+   `/auth/register`, `/auth/login`, `/vault`, `/keys`. **(done — deployed.**
+   Client identity-keypair generation still happens with the account UI in
+   Phase 4; the server already stores the public key.)
+3. ✅ **Sync endpoints.** `/sync/push`, `/sync/pull` with LWW + `seq` cursor.
+   **(done — verified with curl.** Note: entries only so far; **strands** sync is
+   the same pattern and gets added in Phase 4, via a `strands` table + the same
+   push/pull, or a shared table with a `kind` column.)
 4. **Client engine + account UI.** `lib/sync.ts`, `lib/api.ts`, a "Connect an
    account" panel (register/login). Wire the triggers. Gate behind opt-in so
    local-only keeps working untouched. Add server origin to CSP `connect-src`.
