@@ -211,6 +211,13 @@ is shaped to support it. None of this is built; it comes *after* sync.
   can never read a shared strand — only its members can.
 - **Social recovery.** If a member forgets their passphrase, the *family
   together* can restore their access; no server or outsider ever can.
+- **Calm collaboration, NOT a notification engine.** Updates should simply *be
+  there when you visit the strand* (at most a soft "N new pieces" marker), with —
+  if any — only gentle, opt-in notifications. Never messenger-style pings,
+  unread badges, "typing…", or pressure to respond. A slow, loving shared story,
+  not a chat. Optional live refresh only while members *both* have it open, so
+  weaving together in the moment flows. This is a hard line, per the purpose
+  north star — don't let "engagement" reasoning erode it.
 
 ### How it works (sketch)
 - **Shared strand key.** Each shared strand gets its own symmetric key (a DEK).
