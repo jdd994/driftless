@@ -86,14 +86,15 @@ body {
 .capture {
   background: var(--surface);
   border: 1px solid var(--line-soft);
-  border-radius: 14px;
-  padding: 16px 16px 12px;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 18px 40px -28px rgba(0, 0, 0, 0.8);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border-radius: 18px;
+  padding: 22px 24px 14px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025) inset, 0 14px 36px -30px rgba(0, 0, 0, 0.7);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
+/* A soft amber halo on focus instead of a hard ring — quieter, more page-like. */
 .capture:focus-within {
-  border-color: rgba(224, 163, 62, 0.45);
-  box-shadow: 0 0 0 1px rgba(224, 163, 62, 0.18), 0 18px 40px -26px rgba(0, 0, 0, 0.85);
+  border-color: rgba(224, 163, 62, 0.38);
+  box-shadow: 0 0 0 3px var(--amber-dim), 0 14px 36px -28px rgba(0, 0, 0, 0.78);
 }
 .capture-input {
   width: 100%;
@@ -101,12 +102,13 @@ body {
   background: transparent;
   color: var(--ink);
   font-family: var(--serif);
-  font-size: 18px;
-  line-height: 1.55;
+  font-size: 19px;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
   resize: none;
   outline: none;
-  min-height: 28px;
-  max-height: 50vh;
+  min-height: 34px;
+  max-height: 55vh;
   overflow-y: auto;
 }
 .capture-input::placeholder { color: var(--ink-faint); font-style: italic; }
@@ -591,7 +593,8 @@ kbd {
   :root { --rail-x: 70px; }
   .wrap { padding: max(20px, env(safe-area-inset-top)) 15px 110px; }
   .entry .time { font-size: 11px; }
-  .entry .body, .capture-input { font-size: 16.5px; }
+  .entry .body { font-size: 16.5px; }
+  .capture-input { font-size: 17.5px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

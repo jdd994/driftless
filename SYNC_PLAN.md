@@ -230,10 +230,14 @@ is shaped to support it. None of this is built; it comes *after* sync.
   combining their shares can re-grant access. The server holds no usable share.
 
 ### Other vision items
-- **Pictures in strands.** Encrypted image blobs (invariant #1). Local-first is
-  feasible before sharing; *syncing* images pushes the server toward object
-  storage (Cloudflare **R2**), since D1 isn't for large blobs. Watch storage size
-  / iOS eviction.
+- **Media in entries/strands (not just pictures).** Attach encrypted blobs of
+  any kind — **images, video, audio/music, other files** — to an entry, so they
+  can live in a strand (e.g. add a song to a strand, or a video to a memory).
+  Same model as text: encrypted (invariant #1), decrypt-to-blob-URL for
+  playback. Local-first is feasible before sharing; *syncing* media pushes the
+  server toward object storage (Cloudflare **R2**), since D1 isn't for large
+  blobs. **Video especially** is large — storage size + iOS eviction get sharper,
+  so per-item/per-account size limits matter.
 - **Always free, no ads, donations.** Already the ethos (no third-party scripts
   that can see content). Donations must be a **plain outbound link** (Ko-fi /
   GitHub Sponsors / Stripe link), never an embedded widget (those load trackers).
@@ -293,3 +297,30 @@ Local-first softens it enormously, but decide early **where the free-tier storag
 line sits** so donations can realistically cover it. Keep the sync schema
 shardable-by-user (it already is) and blob-friendly so this stays a capacity
 question, never an architecture one.
+
+---
+
+## Appendix — Longevity (and why not blockchain)
+
+The goal is an archive that **survives decades — outliving devices, the company,
+even the original host.** Decided (2026-07-01): longevity comes from three things
+already in place, *not* from a blockchain:
+
+- **Local-first** — the data lives on the family's own devices; no single server
+  is a point of failure.
+- **Open source (AGPL)** — anyone can run the server forever; it can't be killed
+  by a company folding.
+- **Portability** — export/backup means the data is never trapped in one place or
+  format. (Habitually keeping a Back up file *is* the longevity plan.)
+
+**Why not blockchain (for the data):** immutability fights the app's editing /
+soft-delete / privacy-delete; a public, permanent ledger is a privacy time bomb
+(harvest-now-decrypt-later on public ciphertext); on-chain writes cost money per
+byte (kills "always free"); and E2E small-group sharing needs no trustless global
+consensus. It would be worse on privacy, editability, cost, *and* simplicity.
+
+If maximal durability is ever wanted, the sensible option is **opt-in permanent /
+decentralized storage of *encrypted* blobs** (e.g. Arweave "pay once, store
+forever", or IPFS) — with the same can't-delete + public-ciphertext caveat, so a
+deliberate user choice, never the foundation. Crypto stays where it's the right
+tool: **donations** (value transfer).
