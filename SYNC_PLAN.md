@@ -243,3 +243,48 @@ is shaped to support it. None of this is built; it comes *after* sync.
 sync (with identity keys) → sharing (shared strand keys + invites) → family
 strands (co-authoring) + social recovery. Pictures and the donation link can ride
 alongside independently.
+
+---
+
+## Appendix — Scaling (how millions of users are absorbed)
+
+The two foundational choices already make scale a non-event for most of the app:
+**a static PWA on a CDN + local-first.** Don't over-build for millions now (~2
+users today); the point is that growth is *adding capacity*, never re-architecting.
+
+### Where the load actually goes
+- **The app (static PWA)** — served from Cloudflare Pages' global CDN, edge-cached
+  everywhere. Millions of downloads of static files is a solved, near-free problem.
+- **Capture / storage / reading / search** — all on the user's **device**
+  (local-first). Users who never enable sync cost ~$0 of server. The work is
+  distributed across devices by design.
+- **Sync server (Workers)** — serverless, auto-scales at the edge, no machines to
+  manage. Only sync users ever touch it.
+- **Database / blobs** — the one thing that grows with users. See below.
+
+### Why the E2E/sync server scales unusually well
+The server stores **opaque ciphertext** and does **no computation on content** —
+no search, no processing, no cross-user joins. Just "store blob for user X, give
+me user X's blobs since cursor N." It **shards perfectly by `user_id`** (every row
+is per-user; no global index). Shared/family strands are **small bounded groups**,
+so nothing ever becomes a viral hot object.
+
+### What we account for as it grows
+- **D1 limits** (serverless SQLite has per-DB size/throughput ceilings) →
+  **partition users across many D1 databases** (trivial, data is per-user and
+  independent), and move large blobs — encrypted entries and especially **photos**
+  — to **Cloudflare R2** (effectively unlimited, cheap), keeping only small
+  metadata/pointers in D1. An additive evolution, not a rewrite.
+- **Storage + bandwidth cost** — the *real* constraint (money, not capability).
+  Local-first means non-sync users are ~free; sync-with-photos users cost storage.
+- **Fairness/abuse** — per-account **rate limits + storage quotas**, enforced at
+  the Cloudflare edge; sign-up abuse prevention.
+- **Observability** — monitoring + error tracking that is **privacy-preserving**
+  (never log entry content — invariant #1).
+
+### The one genuine future decision (not technical)
+At millions of **sync-with-photos** users, **"always free" meets storage cost.**
+Local-first softens it enormously, but decide early **where the free-tier storage
+line sits** so donations can realistically cover it. Keep the sync schema
+shardable-by-user (it already is) and blob-friendly so this stays a capacity
+question, never an architecture one.
