@@ -1,0 +1,100 @@
+// api.ts
+// Client for the Driftless sync server. Thin, typed fetch wrappers — it moves
+// ciphertext + non-secret metadata only, never plaintext or the passphrase.
+// See ../SYNC_PLAN.md. Nothing here runs until the sync engine (Phase 4) wires
+// it in.
+import type { CipherBlob } from "./crypto";
+
+// The sync server. (Swap for a custom domain later; also update connect-src in
+// public/_headers if this origin changes.)
+export const API_BASE = "https://driftless-server.jdd994.workers.dev";
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// One record as it travels to/from the server (the content stays ciphertext).
+export type SyncRecord = {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  deleted: boolean;
+  content: CipherBlob;
+};
+
+export type VaultMetaDTO = {
+  salt: number[];
+  verifier: CipherBlob;
+  iterations?: number;
+};
+
+type ReqOpts = { method?: string; token?: string; body?: unknown };
+
+async function req<T>(path: string, opts: ReqOpts = {}): Promise<T> {
+  const res = await fetch(API_BASE + path, {
+    method: opts.method ?? "GET",
+    headers: {
+      ...(opts.body ? { "content-type": "application/json" } : {}),
+      ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
+    },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = (await res.json().catch(() => ({}))) as any;
+  if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status})`, res.status);
+  return data as T;
+}
+
+// ---- auth + account ----
+
+export function register(
+  email: string,
+  password: string,
+  vault: VaultMetaDTO,
+  identityPublicKey: string
+): Promise<{ token: string; userId: string }> {
+  return req("/auth/register", {
+    method: "POST",
+    body: { email, password, vault, identityPublicKey },
+  });
+}
+
+export function login(
+  email: string,
+  password: string
+): Promise<{ token: string; userId: string }> {
+  return req("/auth/login", { method: "POST", body: { email, password } });
+}
+
+// Fetch the vault metadata so a new device can re-derive the key from the
+// passphrase.
+export function fetchVault(token: string): Promise<VaultMetaDTO> {
+  return req("/vault", { token });
+}
+
+// Public-key directory (for future sharing).
+export function fetchKeys(
+  token: string,
+  email: string
+): Promise<{ identityPublicKey: string | null }> {
+  return req(`/keys?email=${encodeURIComponent(email)}`, { token });
+}
+
+// ---- sync ----
+
+export function pushEntries(
+  token: string,
+  changes: SyncRecord[]
+): Promise<{ applied: number; cursor: number }> {
+  return req("/sync/push", { method: "POST", token, body: { changes } });
+}
+
+export function pullEntries(
+  token: string,
+  since: number
+): Promise<{ changes: SyncRecord[]; cursor: number; more: boolean }> {
+  return req(`/sync/pull?since=${since}`, { token });
+}
