@@ -1,6 +1,7 @@
 // App.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useJournal } from "./hooks/useJournal";
+import { useSettings } from "./hooks/useSettings";
 import { allTags, filterEntries, toMarkdown, type Entry, type Strand } from "./lib/journal";
 import { LockScreen } from "./components/LockScreen";
 import { Capture } from "./components/Capture";
@@ -10,6 +11,7 @@ import { Stream } from "./components/Stream";
 import { Timeline } from "./components/Timeline";
 import { StrandsView } from "./components/StrandsView";
 import { HelpSheet } from "./components/HelpSheet";
+import { Settings } from "./components/Settings";
 import { Toast, type ToastData } from "./components/Toast";
 
 function Clock() {
@@ -39,13 +41,19 @@ export default function App() {
   const [tag, setTag] = useState<string | null>(null);
   const [view, setView] = useState<"stream" | "timeline" | "strands">("stream");
   const [help, setHelp] = useState<null | "top" | "support">(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<ToastData>(null);
   const [veil, setVeil] = useState(0);
   const toastTimer = useRef<number | null>(null);
+  const settings = useSettings();
 
   // Auto night-dimming: warm veil follows the local clock — 0 at midday,
-  // deepest around 1am — so the app is never harsh at 3am.
+  // deepest around 1am — so the app is never harsh at 3am. Off when disabled.
   useEffect(() => {
+    if (!settings.nightDim) {
+      setVeil(0);
+      return;
+    }
     const compute = () => {
       const now = new Date();
       const h = now.getHours() + now.getMinutes() / 60;
@@ -60,7 +68,7 @@ export default function App() {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, []);
+  }, [settings.nightDim]);
 
   function showToast(data: ToastData) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -215,6 +223,14 @@ export default function App() {
           >
             ♡
           </button>
+          <button
+            className="lock-link gear-link"
+            onClick={() => setShowSettings(true)}
+            title="Set the mood"
+            aria-label="Settings"
+          >
+            ⚙
+          </button>
           {j.bioSupported && (
             <button
               className="lock-link"
@@ -317,6 +333,15 @@ export default function App() {
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
       {help && <HelpSheet focus={help} onClose={() => setHelp(null)} />}
+      {showSettings && (
+        <Settings
+          onClose={() => setShowSettings(false)}
+          mood={settings.mood}
+          onMood={settings.setMood}
+          nightDim={settings.nightDim}
+          onNightDim={settings.setNightDim}
+        />
+      )}
       <div className="night-veil" style={{ opacity: veil }} aria-hidden="true" />
     </div>
   );

@@ -27,6 +27,60 @@
   --maxw: 720px;
 }
 
+/* ---- Moods (selectable in Settings) ---- */
+/* Lamplight is the :root default above. Each mood overrides only the palette. */
+
+:root[data-mood="ember"] {
+  --bg:        #17100B;
+  --bg-raised: #1F150E;
+  --surface:   #281A11;
+  --surface-2: #2F2015;
+  --line:      #3E2A1B;
+  --line-soft: #2C1E14;
+  --ink:       #EBD9C0;
+  --ink-soft:  #BBA085;
+  --ink-faint: #82705C;
+  --amber:     #E0954A;
+  --amber-dim: rgba(224, 149, 74, 0.15);
+  --tag:       #A9A487;
+  --tag-dim:   rgba(169, 164, 135, 0.14);
+  --danger:    #D07E63;
+}
+
+:root[data-mood="candle"] {
+  --bg:        #110E09;
+  --bg-raised: #17120B;
+  --surface:   #1E1810;
+  --surface-2: #251E14;
+  --line:      #322A1D;
+  --line-soft: #241D15;
+  --ink:       #D6CBB5;
+  --ink-soft:  #A79C84;
+  --ink-faint: #726853;
+  --amber:     #CE9A50;
+  --amber-dim: rgba(206, 154, 80, 0.13);
+  --tag:       #98A38B;
+  --tag-dim:   rgba(152, 163, 139, 0.12);
+  --danger:    #C58068;
+}
+
+:root[data-mood="parchment"] {
+  --bg:        #ECE3D1;
+  --bg-raised: #E5DAC4;
+  --surface:   #F1E9D8;
+  --surface-2: #E8DFCC;
+  --line:      #D2C5AB;
+  --line-soft: #DDD1B9;
+  --ink:       #3A3121;
+  --ink-soft:  #6B5E48;
+  --ink-faint: #97876C;
+  --amber:     #B67A2A;
+  --amber-dim: rgba(182, 122, 42, 0.15);
+  --tag:       #6E7A5E;
+  --tag-dim:   rgba(110, 122, 94, 0.16);
+  --danger:    #B25A3E;
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root {
@@ -469,6 +523,75 @@ kbd {
 }
 .heart-link { font-size: 13px; }
 .heart-link:hover { color: var(--amber); }
+.gear-link { font-size: 13px; }
+.gear-link:hover { color: var(--ink-soft); }
+
+/* ---- mood swatches ---- */
+.mood-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.mood-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.mood-swatch:hover { border-color: var(--line); }
+.mood-swatch.active { border-color: var(--amber); }
+.mood-chip {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+.mood-line { position: absolute; left: 10px; right: 22px; top: 15px; height: 3px; border-radius: 2px; opacity: 0.85; }
+.mood-dot { position: absolute; right: 9px; top: 12px; width: 9px; height: 9px; border-radius: 50%; }
+.mood-name { font-family: var(--serif); font-size: 14.5px; color: var(--ink); }
+.mood-desc { font-family: var(--sans); font-size: 11.5px; color: var(--ink-faint); }
+
+/* ---- toggle ---- */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.toggle-text { flex: 1; font-family: var(--sans); font-size: 13px; line-height: 1.5; color: var(--ink-soft); }
+.toggle-switch {
+  flex: none;
+  width: 40px;
+  height: 24px;
+  border-radius: 14px;
+  background: var(--line);
+  position: relative;
+  transition: background 0.2s ease;
+}
+.toggle-row.on .toggle-switch { background: var(--amber); }
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg);
+  transition: transform 0.2s ease;
+}
+.toggle-row.on .toggle-knob { transform: translateX(16px); }
 .help-scrim {
   position: fixed;
   inset: 0;
