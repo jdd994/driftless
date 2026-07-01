@@ -129,8 +129,16 @@ npm run preview  # serve the built app
    see invariant 4: the account says *whose* ciphertext this is; the passphrase
    *decrypts* it and never leaves the device. Don't derive the key from the
    login credential.
-5. Niceties: link entries into named threads (beyond #tags), pin/favorite,
-   per-day word count, biometric unlock on mobile, richer export (JSON + md).
+5. Niceties (some done): named threads → **Strands (done)**, biometric →
+   **Quick unlock (done)**, richer export → **encrypted Back up (done)**. Still
+   open: a **warm first-run welcome** (what Driftless is / how it helps — the
+   in-app "landing page", key for frictionless word-of-mouth spread; no separate
+   marketing site — the PWA link *is* the distribution); a **calm suggestion
+   box** (GitHub Discussions now — zero-infra, engage at your pace; optional
+   in-app box posting to our own D1 later — framed "read when I can, no
+   obligation"); **media in entries/strands** (see SYNC_PLAN); pin/favorite;
+   per-day word count; a **custom domain** (prettier/trustworthier link,
+   DNS-only maintenance).
 
 ## Watch out for
 
