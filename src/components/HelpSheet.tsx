@@ -1,7 +1,7 @@
 // HelpSheet.tsx
 // A quiet in-app guide. Opened from the “?” in the header; dismissed by the ✕,
 // a tap outside, or Escape. Calm, second-person copy that matches the app.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Donation addresses shown in the Support section. Just copyable text + a link —
 // no processor, no widget, no tracker, no CSP change (privacy-safe).
@@ -33,12 +33,25 @@ function CopyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function HelpSheet({ onClose }: { onClose: () => void }) {
+export function HelpSheet({
+  onClose,
+  focus,
+}: {
+  onClose: () => void;
+  focus?: "top" | "support";
+}) {
+  const supportRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Opened via the heart → jump straight to Support.
+  useEffect(() => {
+    if (focus === "support") supportRef.current?.scrollIntoView({ block: "start" });
+  }, [focus]);
 
   return (
     <div className="help-scrim" onClick={onClose}>
@@ -115,7 +128,7 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
             </p>
           </section>
 
-          <section className="support">
+          <section className="support" ref={supportRef}>
             <h3>Support Driftless</h3>
             <p>
               Driftless is free, forever — no ads, no tracking, no one reading your words. If it's

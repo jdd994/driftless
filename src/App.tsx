@@ -37,7 +37,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | null>(null);
   const [view, setView] = useState<"stream" | "timeline" | "strands">("stream");
-  const [showHelp, setShowHelp] = useState(false);
+  const [help, setHelp] = useState<null | "top" | "support">(null);
   const [toast, setToast] = useState<ToastData>(null);
   const toastTimer = useRef<number | null>(null);
 
@@ -180,11 +180,19 @@ export default function App() {
           <Clock />
           <button
             className="lock-link help-link"
-            onClick={() => setShowHelp(true)}
+            onClick={() => setHelp("top")}
             title="How Driftless works"
             aria-label="Help"
           >
             ?
+          </button>
+          <button
+            className="lock-link heart-link"
+            onClick={() => setHelp("support")}
+            title="Support Driftless"
+            aria-label="Support Driftless"
+          >
+            ♡
           </button>
           {j.bioSupported && (
             <button
@@ -287,7 +295,7 @@ export default function App() {
       )}
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
-      {showHelp && <HelpSheet onClose={() => setShowHelp(false)} />}
+      {help && <HelpSheet focus={help} onClose={() => setHelp(null)} />}
     </div>
   );
 }

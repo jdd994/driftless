@@ -446,6 +446,8 @@ kbd {
   align-items: center;
   justify-content: center;
 }
+.heart-link { font-size: 13px; }
+.heart-link:hover { color: var(--amber); }
 .help-scrim {
   position: fixed;
   inset: 0;

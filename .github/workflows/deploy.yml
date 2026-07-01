@@ -34,7 +34,9 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=driftless
+          # --branch=production so CI publishes to the live URL, not a preview
+          # (the project's production branch is "production", not "main").
+          command: pages deploy dist --project-name=driftless --branch=production
 
   server:
     name: Sync Worker
