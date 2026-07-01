@@ -27,7 +27,8 @@ function Clock() {
   const time = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   return (
     <div className="clock">
-      {date} · <span className="now">{time}</span>
+      <span className="clock-date">{date} · </span>
+      <span className="now">{time}</span>
     </div>
   );
 }
