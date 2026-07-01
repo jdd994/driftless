@@ -457,15 +457,17 @@ kbd {
   width: 100%;
   font-family: var(--serif);
   font-size: 17px;
-  line-height: 1.6;
+  line-height: 1.7;
   color: var(--ink);
   background: var(--bg-raised);
-  border: 1px solid rgba(224, 163, 62, 0.4);
-  border-radius: 10px;
-  padding: 10px 12px;
-  resize: vertical;
+  border: 1px solid rgba(219, 161, 74, 0.4);
+  border-radius: 12px;
+  padding: 12px 14px;
+  resize: none; /* height is auto-managed to fit content, up to ~60vh */
   outline: none;
-  min-height: 70px;
+  min-height: 84px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 .edit-foot { margin-top: 8px; display: flex; gap: 8px; }
 

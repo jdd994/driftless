@@ -1,5 +1,5 @@
 // EntryItem.tsx
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   timeLabel,
   formatAnchor,
@@ -58,8 +58,21 @@ export function EntryItem({
   const [anchorDraft, setAnchorDraft] = useState("");
   const [addingStrand, setAddingStrand] = useState(false);
   const [newStrand, setNewStrand] = useState("");
+  const editRef = useRef<HTMLTextAreaElement>(null);
   const edited = entry.updatedAt !== entry.createdAt;
   const canStrand = strands && onToggleStrand && onCreateStrandWith;
+
+  // Grow the edit box to fit the whole thought (up to ~60vh, then scroll), so
+  // editing shows full context instead of a few cramped lines.
+  function growEdit() {
+    const ta = editRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, window.innerHeight * 0.6) + "px";
+  }
+  useEffect(() => {
+    if (editing) growEdit();
+  }, [editing]);
 
   function createStrandWith() {
     const title = newStrand.trim();
@@ -97,9 +110,13 @@ export function EntryItem({
         <>
           <textarea
             className="edit"
+            ref={editRef}
             autoFocus
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              growEdit();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
