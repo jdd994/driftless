@@ -139,6 +139,15 @@ npm run preview  # serve the built app
    obligation"); **media in entries/strands** (see SYNC_PLAN); pin/favorite;
    per-day word count; a **custom domain** (prettier/trustworthier link,
    DNS-only maintenance).
+6. **Strand evolution — "substrands"/sections (idea, not now).** Composition at
+   multiple scales: fragments → section → whole (chapters in a book, movements
+   in a song). Avoid arbitrary recursive nesting (strand-in-strand trees drift
+   toward a fiddly outliner and fight the "calm, easy, intuitive" pillar).
+   Lightest, most on-brand approach: a **section is just a piece flagged as a
+   heading** — everything until the next heading belongs to it. Keeps the flat
+   model and "everything is a thought," gives grouped fragments + read-as-one
+   flow, no new hierarchy to manage. ~90% of the value, little of the risk.
+   Design carefully, after sync.
 
 ## Watch out for
 
