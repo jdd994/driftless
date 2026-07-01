@@ -6,6 +6,15 @@ Quick journaling that opens instantly, organizes everything by time, works
 offline, installs to your home screen, and encrypts every entry so only you can
 read it.
 
+## What it's for
+
+Driftless is an *inward-facing* place — the opposite of social media. Instead of
+performing for an audience and chasing likes, you turn inward: catch your
+thoughts, remember what matters, and build stories — alone or together with the
+people you love. No metrics, no followers, no comparison, nothing to perform.
+
+**Love is the point: loving yourself, loving others, and sharing that love.**
+
 ## Run it
 
 ```bash

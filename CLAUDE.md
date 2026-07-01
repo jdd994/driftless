@@ -11,6 +11,30 @@ is already waiting; type; it's kept, timestamped, and threaded onto a timeline.
 It is **local-first** and **end-to-end encrypted**. It is **not** yet synced
 across devices — that's the main open chapter (see Roadmap).
 
+## Purpose (the north star)
+
+Driftless is an **inward-facing "social" app.** Where social media is outward
+performance rewarded by metrics — likes, followers, views, and the comparison
+and extraction that follow — Driftless inverts it:
+
+- **Inward first:** catch your own thoughts, remember, reflect. Taking your
+  inner life seriously is loving yourself.
+- **Then outward from love, not for validation:** share a story, or build one
+  *together* with people you love (shared/family strands), openly.
+- **No scoreboard:** no likes, follower counts, or rankings — the reward is
+  connection and meaning, not dopamine.
+
+**Love is the point — loving yourself, loving others, and sharing that love.**
+
+Filter every feature through one question: *does this deepen love, reflection,
+and genuine connection, or does it sneak in performance, comparison, or
+extraction?* If the latter, don't build it — no matter how normal it is for a
+"social" app. **Never** add likes, follower/vanity counts, public metrics,
+algorithmic feeds, ads, or engagement hooks. This is *why* the app is E2E,
+local-first, no-ads, no-analytics, and open-source: those choices serve
+love-as-the-point, not extraction. And it must stay **easy and intuitive** —
+presence shouldn't require effort.
+
 ## Design intent (don't flatten this)
 
 - The feeling is a quiet, warm, lamplit room — calm at any hour, including 3am.
