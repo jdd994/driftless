@@ -1,7 +1,37 @@
 // HelpSheet.tsx
 // A quiet in-app guide. Opened from the “?” in the header; dismissed by the ✕,
 // a tap outside, or Escape. Calm, second-person copy that matches the app.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+
+// Donation addresses shown in the Support section. Just copyable text + a link —
+// no processor, no widget, no tracker, no CSP change (privacy-safe).
+const SUPPORT = {
+  btc: "bc1qvhzyyhjngwyc02p5ska0pk33tvn6dnq06vacgv", // device-verified on Trezor
+  eth: "0x6857f91F7Fcd7B45a3ab3A51D2CdC47E23FE8c75",
+  // fiatUrl: "", // optional Ko-fi / GitHub Sponsors / Stripe link
+};
+
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard blocked — the address is still visible to copy by hand
+    }
+  }
+  return (
+    <div className="support-row">
+      <span className="support-label">{label}</span>
+      <button className="support-addr" onClick={copy} title={`Copy ${label} address`}>
+        <span className="support-addr-text">{value}</span>
+        <span className="support-copy">{copied ? "copied ✓" : "copy"}</span>
+      </button>
+    </div>
+  );
+}
 
 export function HelpSheet({ onClose }: { onClose: () => void }) {
   useEffect(() => {
@@ -83,6 +113,16 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
               <b>Export</b> saves a plain, readable copy. Your thoughts live on this device for now,
               so back up now and then.
             </p>
+          </section>
+
+          <section className="support">
+            <h3>Support Driftless</h3>
+            <p>
+              Driftless is free, forever — no ads, no tracking, no one reading your words. If it's
+              meaningful to you, a small tip helps keep it alive.
+            </p>
+            <CopyRow label="Bitcoin" value={SUPPORT.btc} />
+            <CopyRow label="Ethereum" value={SUPPORT.eth} />
           </section>
         </div>
       </div>

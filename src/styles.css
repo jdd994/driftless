@@ -474,6 +474,27 @@ kbd {
 .help-body h3 { font-family: var(--serif); font-weight: 500; font-size: 16px; color: var(--ink); margin: 0 0 6px; }
 .help-body p { font-family: var(--sans); font-size: 13.5px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 6px; }
 .help-body b { color: var(--ink); font-weight: 600; }
+.support-row { margin-top: 10px; }
+.support-label { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
+.support-addr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+  text-align: left;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.support-addr:hover { border-color: var(--line); }
+.support-addr-text { flex: 1; font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); word-break: break-all; line-height: 1.4; }
+.support-copy { flex: none; font-family: var(--sans); font-size: 11px; font-weight: 600; color: var(--amber); }
+.support-fiat { display: inline-block; margin-top: 12px; font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--amber); text-decoration: none; }
+.support-fiat:hover { text-decoration: underline; }
 
 /* ---------- lock screen ---------- */
 .lock {
