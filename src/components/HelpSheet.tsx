@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 const SUPPORT = {
   btc: "bc1qvhzyyhjngwyc02p5ska0pk33tvn6dnq06vacgv", // device-verified on Trezor
   eth: "0x6857f91F7Fcd7B45a3ab3A51D2CdC47E23FE8c75",
-  // fiatUrl: "", // optional Ko-fi / GitHub Sponsors / Stripe link
+  fiatUrl: "https://ko-fi.com/johnny65449", // card/PayPal donations (outbound link)
 };
 
 function CopyRow({ label, value }: { label: string; value: string }) {
@@ -123,6 +123,16 @@ export function HelpSheet({ onClose }: { onClose: () => void }) {
             </p>
             <CopyRow label="Bitcoin" value={SUPPORT.btc} />
             <CopyRow label="Ethereum" value={SUPPORT.eth} />
+            {SUPPORT.fiatUrl && (
+              <a
+                className="support-fiat"
+                href={SUPPORT.fiatUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Prefer a card? Support on Ko-fi →
+              </a>
+            )}
           </section>
         </div>
       </div>
