@@ -4,7 +4,7 @@
 // ciphertext. v1 is text pieces — you and the people you invite write into the
 // same strand, and it's there when either of you visits. No pings, no badges.
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SharedStrandView } from "../lib/journal";
+import { sharedPieces, type SharedStrandView } from "../lib/journal";
 import type { StrandMember } from "../lib/api";
 
 type Props = {
@@ -112,7 +112,7 @@ export function SharedView(props: Props) {
       ) : (
         <ul className="strand-list">
           {sharedStrands.map((s) => {
-            const count = s.entryIds.filter((id) => s.pieces[id]).length;
+            const count = sharedPieces(s).length;
             return (
               <li key={s.strandId}>
                 <button className="strand-card" onClick={() => setSelectedId(s.strandId)}>
@@ -202,10 +202,7 @@ function SharedDetail({
     if (err) setMemberNote(err);
   }
 
-  const ordered = useMemo(
-    () => strand.entryIds.map((id) => strand.pieces[id]).filter(Boolean),
-    [strand.entryIds, strand.pieces]
-  );
+  const ordered = useMemo(() => sharedPieces(strand), [strand]);
 
   async function write() {
     const text = compose.trim();

@@ -75,6 +75,7 @@ import {
   decodePayload,
   encodeStrand,
   decodeStrand,
+  sharedPieces,
   type Entry,
   type Anchor,
   type Strand,
@@ -902,7 +903,10 @@ export function useJournal() {
       try {
         const pieceId = uid();
         const t = Date.now();
-        const entryIds = [...live.entryIds, pieceId];
+        // Base the new order on every piece we currently know about (including
+        // any that a concurrent write orphaned from the meta), so writing heals
+        // the order instead of dropping a co-author's piece.
+        const entryIds = [...sharedPieces(live).map((p) => p.id), pieceId];
         const pieceContent = await encryptString(live.dek, encodePayload(body));
         const metaContent = await encryptString(live.dek, encodeStrand(live.title, entryIds));
         await sharedPush(token, strandId, [

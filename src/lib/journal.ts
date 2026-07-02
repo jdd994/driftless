@@ -258,6 +258,30 @@ export type SharedStrandView = {
   pieces: Record<string, SharedPiece>;
 };
 
+// Resolve a shared strand's pieces into display order. The order lives in a
+// single last-write-wins "meta" record, so two members writing at nearly the
+// same time can race — one meta wins and could omit the other's brand-new
+// piece. To guarantee a co-author's thought is *never* silently dropped, any
+// piece not named by the order still appears, appended by creation time.
+export function sharedPieces(view: {
+  entryIds: string[];
+  pieces: Record<string, SharedPiece>;
+}): SharedPiece[] {
+  const seen = new Set<string>();
+  const out: SharedPiece[] = [];
+  for (const id of view.entryIds) {
+    const p = view.pieces[id];
+    if (p) {
+      out.push(p);
+      seen.add(id);
+    }
+  }
+  const extras = Object.values(view.pieces)
+    .filter((p) => !seen.has(p.id))
+    .sort((a, b) => a.createdAt - b.createdAt);
+  return [...out, ...extras];
+}
+
 // Resolve a strand's ordered entry ids into entries, skipping any that no
 // longer exist (e.g. deleted thoughts) so dangling references are harmless.
 export function strandEntries(entryIds: string[], byId: Map<string, Entry>): Entry[] {
