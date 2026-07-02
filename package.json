@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && npx wrangler pages deploy dist --project-name driftless --branch=production"
+    "deploy": "npm run build && npx wrangler pages deploy dist --project-name driftless --branch=production",
+    "backup": "bash scripts/backup.sh"
   },
   "dependencies": {
     "idb": "^8.0.0",

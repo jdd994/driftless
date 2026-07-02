@@ -10,3 +10,7 @@ dist-ssr
 # Cloudflare / wrangler local state + secrets
 .wrangler/
 .dev.vars
+
+# Database backups — contain account metadata, password hashes, and feedback.
+# Never commit; keep them somewhere safe locally / offline.
+backups/
