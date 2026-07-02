@@ -190,6 +190,22 @@ export function HelpSheet({
           </section>
 
           <section>
+            <h3>Staying safe</h3>
+            <p>
+              There are two separate secrets: your <b>passphrase</b> unlocks your
+              writing and never leaves your device — there's no reset, so keep it
+              in a password manager and on paper somewhere safe. Your <b>account
+              password</b> (for syncing) is a different thing; make it its own
+              strong password, and turn on two-factor login on your email.
+            </p>
+            <p>
+              Lock your devices, and treat any <b>invite link</b> like a house key
+              — share it privately, and if it might have leaked, remove that person
+              (the strand re-keys itself). Never screenshot or text your passphrase.
+            </p>
+          </section>
+
+          <section>
             <h3>Quick unlock</h3>
             <p>
               If your device supports it, turn on <b>Quick unlock</b> to open with your fingerprint

@@ -62,6 +62,9 @@ new thoughts save locally and are there when you reopen it.
   time efficiently). This is fine while everything stays on your device; revisit
   it before adding sync. See `CLAUDE.md`.
 
+For the full threat model, what a breach would and wouldn't expose, simple habits
+that keep you safe, and how to report a vulnerability, see **[SECURITY.md](SECURITY.md)**.
+
 ## Where things live
 
 ```
