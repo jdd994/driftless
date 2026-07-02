@@ -12,6 +12,7 @@ import { Timeline } from "./components/Timeline";
 import { StrandsView } from "./components/StrandsView";
 import { SharedView } from "./components/SharedView";
 import { HelpSheet } from "./components/HelpSheet";
+import { InstallHint } from "./components/InstallHint";
 import { Settings } from "./components/Settings";
 import { Toast, type ToastData } from "./components/Toast";
 
@@ -247,6 +248,8 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <InstallHint />
 
       <Capture onKeep={j.addEntry} />
 

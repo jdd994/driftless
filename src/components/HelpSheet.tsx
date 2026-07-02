@@ -164,6 +164,22 @@ export function HelpSheet({
           </section>
 
           <section>
+            <h3>Install it as an app</h3>
+            <p>
+              Driftless runs in your browser, but you can add it to your home
+              screen so it opens on its own, full-screen, like any app.
+            </p>
+            <p>
+              <b>iPhone / iPad:</b> in Safari, tap the <b>Share</b> button (the
+              square with an ↑), then <b>Add to Home Screen</b>.
+            </p>
+            <p>
+              <b>Android / computer:</b> open the browser menu (<b>⋮</b>) and
+              choose <b>Install app</b> or <b>Add to Home screen</b>.
+            </p>
+          </section>
+
+          <section>
             <h3>Your privacy</h3>
             <p>
               Everything is end-to-end encrypted with your passphrase. It never leaves your device,

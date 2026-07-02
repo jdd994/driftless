@@ -3,6 +3,8 @@
 // before a passphrase is chosen, so a newcomer (often someone a friend just
 // sent the link to) understands what this is, why it's private, and the one
 // honest trade: the passphrase has no reset. Presentational only.
+import { InstallHint } from "./InstallHint";
+
 type Props = {
   onBegin: () => void;
 };
@@ -55,6 +57,8 @@ export function Welcome({ onBegin }: Props) {
           even we can recover what you wrote. That's the trade for real privacy:
           pick a few words you'll remember, and keep them somewhere safe.
         </p>
+
+        <InstallHint />
 
         <button className="save-btn lock-btn welcome-begin" onClick={onBegin}>
           Begin
