@@ -182,6 +182,14 @@ export async function uploadSharedMedia(
   if (!res.ok) throw new ApiError(`Media upload failed (${res.status})`, res.status);
 }
 
+export async function deleteSharedMediaRemote(token: string, strandId: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/shared/${strandId}/media/${id}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) throw new ApiError(`Media delete failed (${res.status})`, res.status);
+}
+
 export async function downloadSharedMedia(
   token: string,
   strandId: string,

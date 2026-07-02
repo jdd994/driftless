@@ -80,6 +80,7 @@ import {
   deleteMediaRemote,
   uploadSharedMedia,
   downloadSharedMedia,
+  deleteSharedMediaRemote,
   type SharedRecord,
   type StrandMember,
 } from "../lib/api";
@@ -614,7 +615,17 @@ export function useJournal() {
     async (entryId: string, file: File) => {
       const key = keyRef.current;
       if (!key) return;
-      const { bytes, type } = await compressImage(file);
+      let bytes: ArrayBuffer;
+      let type: string;
+      try {
+        ({ bytes, type } = await compressImage(file));
+      } catch (e) {
+        setSaveError({
+          message: e instanceof Error ? e.message : "Couldn't add that photo.",
+          retry: () => void attachMedia(entryId, file),
+        });
+        return;
+      }
       const cb = await encryptBytes(key, bytes);
       const mediaId = uid();
       await putMedia({
@@ -1011,6 +1022,64 @@ export function useJournal() {
     [publishShared]
   );
 
+  // Rename a shared strand (updates the title in the meta record).
+  const renameSharedStrand = useCallback(
+    async (strandId: string, title: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return "This strand isn't ready yet.";
+      const clean = title.trim() || "Untitled";
+      try {
+        const t = Date.now();
+        live.title = clean;
+        await sharedPush(token, strandId, [
+          { kind: "meta", id: "meta", createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: await encryptString(live.dek, encodeStrand(clean, sharedPieces(live).map((p) => p.id))) },
+        ] as SharedRecord[]);
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't rename that strand.";
+      }
+    },
+    [publishShared]
+  );
+
+  // Delete a piece from a shared strand (tombstone + drop from order), and free
+  // any photos it held from storage.
+  const deleteSharedPiece = useCallback(
+    async (strandId: string, pieceId: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return "This strand isn't ready yet.";
+      try {
+        const piece = live.pieces[pieceId];
+        const t = Date.now();
+        const entryIds = sharedPieces(live)
+          .map((p) => p.id)
+          .filter((id) => id !== pieceId);
+        await sharedPush(token, strandId, [
+          { kind: "piece", id: pieceId, createdAt: t, updatedAt: t, deleted: true, dekEpoch: live.dekEpoch, content: await encryptString(live.dek, "") },
+          { kind: "meta", id: "meta", createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: await encryptString(live.dek, encodeStrand(live.title, entryIds)) },
+        ] as SharedRecord[]);
+        for (const mid of piece?.mediaIds ?? []) {
+          try {
+            await deleteSharedMediaRemote(token, strandId, mid);
+          } catch {
+            // storage cleanup is best-effort
+          }
+          mediaUrls.current.delete(mid);
+        }
+        delete live.pieces[pieceId];
+        live.entryIds = entryIds;
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't delete that piece.";
+      }
+    },
+    [publishShared]
+  );
+
   // Add a photo to a shared strand (M2): compress → encrypt with the strand DEK
   // → upload to R2 (membership-gated) → append a photo piece. Like writeIn but
   // carrying a captionless image, mirroring addPhotoToStrand for personal ones.
@@ -1328,6 +1397,8 @@ export function useJournal() {
     joinViaInvite,
     addPhotoToSharedStrand,
     getSharedMediaUrl,
+    renameSharedStrand,
+    deleteSharedPiece,
     refreshShared: loadSharedStrands,
   };
 }

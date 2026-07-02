@@ -12,6 +12,7 @@
     "backup": "bash scripts/backup.sh"
   },
   "dependencies": {
+    "heic2any": "^0.0.4",
     "idb": "^8.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

@@ -1031,6 +1031,10 @@ kbd {
   margin: 0 0 16px;
 }
 .join-banner span { flex: 1; font-family: var(--sans); font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
+.shared-piece-row { display: flex; gap: 8px; align-items: flex-start; }
+.shared-piece-body { flex: 1; min-width: 0; }
+.shared-piece-del { flex: none; font-size: 13px; line-height: 1; padding: 4px 5px; color: var(--ink-faint); opacity: 0.5; }
+.shared-piece-del:hover { opacity: 1; color: var(--amber); }
 
 .strand-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 2px 4px; }
 .strand-top-actions { display: flex; gap: 8px; flex-wrap: wrap; }

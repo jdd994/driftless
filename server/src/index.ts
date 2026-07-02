@@ -131,6 +131,14 @@ app.get("/shared/:id/media/:mid", requireAuth, async (c) => {
   });
 });
 
+app.delete("/shared/:id/media/:mid", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  const mid = c.req.param("mid")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  await c.env.MEDIA.delete(`s/${strandId}/${mid}`);
+  return c.json({ ok: true });
+});
+
 // A calm "note to the maker". Open (no account needed) so even a first-time
 // visitor can send a word. Stored separately from journal data; it's a plain
 // message, never touching any ciphertext. Optional token just attributes it.

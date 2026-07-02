@@ -422,6 +422,8 @@ export default function App() {
           onWrite={j.writeInSharedStrand}
           onAddPhoto={j.addPhotoToSharedStrand}
           onMediaUrl={j.getSharedMediaUrl}
+          onRename={j.renameSharedStrand}
+          onDeletePiece={j.deleteSharedPiece}
           onMembers={j.fetchStrandMembers}
           onRemoveMember={j.removeSharedMember}
           onLeave={j.leaveSharedStrand}

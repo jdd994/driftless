@@ -16,6 +16,8 @@ type Props = {
   onWrite: (strandId: string, text: string) => Promise<string | null>;
   onAddPhoto: (strandId: string, file: File) => Promise<string | null>;
   onMediaUrl: (strandId: string, mediaId: string) => Promise<string | null>;
+  onRename: (strandId: string, title: string) => Promise<string | null>;
+  onDeletePiece: (strandId: string, pieceId: string) => Promise<string | null>;
   onMembers: (strandId: string) => Promise<StrandMember[]>;
   onRemoveMember: (strandId: string, userId: string) => Promise<string | null>;
   onLeave: (strandId: string) => Promise<string | null>;
@@ -78,6 +80,8 @@ export function SharedView(props: Props) {
         onWrite={props.onWrite}
         onAddPhoto={props.onAddPhoto}
         onMediaUrl={props.onMediaUrl}
+        onRename={props.onRename}
+        onDeletePiece={props.onDeletePiece}
         onCreateLink={props.onCreateLink}
         onMembers={props.onMembers}
         onRemoveMember={props.onRemoveMember}
@@ -148,6 +152,8 @@ function SharedDetail({
   onWrite,
   onAddPhoto,
   onMediaUrl,
+  onRename,
+  onDeletePiece,
   onCreateLink,
   onMembers,
   onRemoveMember,
@@ -159,6 +165,8 @@ function SharedDetail({
   onWrite: (strandId: string, text: string) => Promise<string | null>;
   onAddPhoto: (strandId: string, file: File) => Promise<string | null>;
   onMediaUrl: (strandId: string, mediaId: string) => Promise<string | null>;
+  onRename: (strandId: string, title: string) => Promise<string | null>;
+  onDeletePiece: (strandId: string, pieceId: string) => Promise<string | null>;
   onCreateLink: (strandId: string) => Promise<{ link: string } | { error: string }>;
   onMembers: (strandId: string) => Promise<StrandMember[]>;
   onRemoveMember: (strandId: string, userId: string) => Promise<string | null>;
@@ -171,6 +179,18 @@ function SharedDetail({
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   const [photoBusy, setPhotoBusy] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(strand.title);
+
+  function saveTitle() {
+    setEditingTitle(false);
+    if (titleDraft.trim() && titleDraft.trim() !== strand.title) onRename(strand.strandId, titleDraft);
+  }
+  async function deletePiece(pieceId: string) {
+    if (!confirm("Remove this from the strand? This can't be undone.")) return;
+    const err = await onDeletePiece(strand.strandId, pieceId);
+    if (err) setNote(err);
+  }
 
   async function createLink() {
     setLinkBusy(true);
@@ -296,7 +316,27 @@ function SharedDetail({
         </div>
       </div>
 
-      <h2 className="strand-title">{strand.title || "Untitled"}</h2>
+      {editingTitle ? (
+        <input
+          className="anchor-input strand-title-input"
+          autoFocus
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={saveTitle}
+          onKeyDown={(e) => e.key === "Enter" && saveTitle()}
+        />
+      ) : (
+        <h2
+          className="strand-title"
+          title="Rename"
+          onClick={() => {
+            setTitleDraft(strand.title);
+            setEditingTitle(true);
+          }}
+        >
+          {strand.title || "Untitled"}
+        </h2>
+      )}
 
       {showMembers && (
         <div className="share-invite">
@@ -393,19 +433,28 @@ function SharedDetail({
           </p>
         ) : (
           ordered.map((p) => (
-            <div key={p.id} className="read-piece">
-              {p.text && <p>{p.text}</p>}
-              {p.mediaIds && p.mediaIds.length > 0 && (
-                <div className="media-grid">
-                  {p.mediaIds.map((mid) => (
-                    <MediaThumb
-                      key={mid}
-                      mediaId={mid}
-                      getUrl={(id) => onMediaUrl(strand.strandId, id)}
-                    />
-                  ))}
-                </div>
-              )}
+            <div key={p.id} className="read-piece shared-piece-row">
+              <button
+                className="act shared-piece-del"
+                title="Remove from strand"
+                onClick={() => deletePiece(p.id)}
+              >
+                ✕
+              </button>
+              <div className="shared-piece-body">
+                {p.text && <p>{p.text}</p>}
+                {p.mediaIds && p.mediaIds.length > 0 && (
+                  <div className="media-grid">
+                    {p.mediaIds.map((mid) => (
+                      <MediaThumb
+                        key={mid}
+                        mediaId={mid}
+                        getUrl={(id) => onMediaUrl(strand.strandId, id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ))
         )}
