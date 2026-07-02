@@ -4,7 +4,7 @@
 // ordinary thought too), arrange the order, and read the whole as one draft.
 import { useMemo, useState } from "react";
 import { strandEntries, type Entry, type Strand, type Anchor } from "../lib/journal";
-import { EntryItem } from "./EntryItem";
+import { EntryItem, MediaThumb } from "./EntryItem";
 
 type Props = {
   strands: Strand[];
@@ -183,7 +183,18 @@ function StrandDetail({
           {ordered.length === 0 ? (
             <p className="strand-read-empty">Nothing here yet.</p>
           ) : (
-            ordered.map((e) => <p key={e.id}>{e.text}</p>)
+            ordered.map((e) => (
+              <div key={e.id} className="read-piece">
+                {e.text && <p>{e.text}</p>}
+                {e.mediaIds && e.mediaIds.length > 0 && (
+                  <div className="media-grid">
+                    {e.mediaIds.map((mid) => (
+                      <MediaThumb key={mid} mediaId={mid} getUrl={getMediaUrl} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
       ) : (

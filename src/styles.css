@@ -794,7 +794,8 @@ kbd {
 .strand-title-input { font-family: var(--serif); font-size: 22px; margin: 8px 0 16px; }
 
 .strand-read { margin: 0 2px; }
-.strand-read p { font-family: var(--serif); font-size: 18px; line-height: 1.7; color: var(--ink); white-space: pre-wrap; margin: 0 0 1.1em; }
+.strand-read p { font-family: var(--serif); font-size: 18px; line-height: 1.7; color: var(--ink); white-space: pre-wrap; margin: 0 0 0.6em; }
+.read-piece { margin: 0 0 1.1em; }
 .strand-read-empty, .strand-pick-empty { font-family: var(--serif); font-style: italic; color: var(--ink-faint); }
 
 .strand-piece { display: flex; gap: 8px; align-items: flex-start; }

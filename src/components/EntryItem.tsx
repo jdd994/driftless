@@ -28,7 +28,7 @@ type Props = {
 
 // One attached photo: decrypts to an in-memory URL on mount. Shows a gentle
 // note if the image lives on another device (media isn't synced yet).
-function MediaThumb({
+export function MediaThumb({
   mediaId,
   getUrl,
   onRemove,
