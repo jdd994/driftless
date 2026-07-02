@@ -48,17 +48,19 @@ app.get("/health", (c) => c.json({ ok: true, service: "driftless-server" }));
 const PULL_LIMIT = 500;
 const MAX_PUSH = 1000;
 
+const KINDS = ["entry", "strand"];
+
 // SQLite upsert that applies last-write-wins: an incoming row only overwrites a
 // stored one when its updatedAt is newer-or-equal. created_at is preserved.
-const UPSERT_ENTRY = `
-INSERT INTO entries (user_id, id, created_at, updated_at, deleted, content, seq)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(user_id, id) DO UPDATE SET
+const UPSERT_OBJECT = `
+INSERT INTO objects (user_id, kind, id, created_at, updated_at, deleted, content, seq)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(user_id, kind, id) DO UPDATE SET
   updated_at = excluded.updated_at,
   deleted    = excluded.deleted,
   content    = excluded.content,
   seq        = excluded.seq
-WHERE excluded.updated_at >= entries.updated_at`;
+WHERE excluded.updated_at >= objects.updated_at`;
 
 function isCipherBlob(x: any): boolean {
   return x && Array.isArray(x.iv) && Array.isArray(x.data);
@@ -66,6 +68,7 @@ function isCipherBlob(x: any): boolean {
 function validChange(ch: any): boolean {
   return (
     ch &&
+    KINDS.includes(ch.kind) &&
     typeof ch.id === "string" &&
     typeof ch.createdAt === "number" &&
     typeof ch.updatedAt === "number" &&
@@ -75,7 +78,7 @@ function validChange(ch: any): boolean {
 }
 async function maxSeq(db: D1Database, userId: string): Promise<number> {
   const r = await db
-    .prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM entries WHERE user_id = ?")
+    .prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM objects WHERE user_id = ?")
     .bind(userId)
     .first<{ m: number }>();
   return r?.m ?? 0;
@@ -95,8 +98,9 @@ app.post("/sync/push", requireAuth, async (c) => {
   if (changes.length > 0) {
     const base = await maxSeq(c.env.DB, userId);
     const stmts = changes.map((ch, i) =>
-      c.env.DB.prepare(UPSERT_ENTRY).bind(
+      c.env.DB.prepare(UPSERT_OBJECT).bind(
         userId,
+        ch.kind,
         ch.id,
         ch.createdAt,
         ch.updatedAt,
@@ -116,10 +120,11 @@ app.get("/sync/pull", requireAuth, async (c) => {
   const userId = c.get("userId");
   const since = Math.max(0, Number(c.req.query("since") ?? "0") || 0);
   const rows = await c.env.DB.prepare(
-    "SELECT id, created_at, updated_at, deleted, content, seq FROM entries WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?"
+    "SELECT kind, id, created_at, updated_at, deleted, content, seq FROM objects WHERE user_id = ? AND seq > ? ORDER BY seq LIMIT ?"
   )
     .bind(userId, since, PULL_LIMIT)
     .all<{
+      kind: string;
       id: string;
       created_at: number;
       updated_at: number;
@@ -129,6 +134,7 @@ app.get("/sync/pull", requireAuth, async (c) => {
     }>();
   const results = rows.results ?? [];
   const changes = results.map((r) => ({
+    kind: r.kind,
     id: r.id,
     createdAt: r.created_at,
     updatedAt: r.updated_at,

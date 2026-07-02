@@ -17,8 +17,11 @@ export class ApiError extends Error {
   }
 }
 
+export type SyncKind = "entry" | "strand";
+
 // One record as it travels to/from the server (the content stays ciphertext).
 export type SyncRecord = {
+  kind: SyncKind;
   id: string;
   createdAt: number;
   updatedAt: number;
@@ -85,14 +88,16 @@ export function fetchKeys(
 
 // ---- sync ----
 
-export function pushEntries(
+// Push a batch of changed records (any mix of kinds). Server applies LWW.
+export function pushChanges(
   token: string,
   changes: SyncRecord[]
 ): Promise<{ applied: number; cursor: number }> {
   return req("/sync/push", { method: "POST", token, body: { changes } });
 }
 
-export function pullEntries(
+// Pull everything with seq greater than the cursor (all kinds).
+export function pullChanges(
   token: string,
   since: number
 ): Promise<{ changes: SyncRecord[]; cursor: number; more: boolean }> {

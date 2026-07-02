@@ -21,15 +21,19 @@ CREATE TABLE IF NOT EXISTS vaults (
   created_at  INTEGER NOT NULL
 );
 
--- entries land here in Phase 3 (push/pull). Defined now so the schema is whole.
-CREATE TABLE IF NOT EXISTS entries (
+-- Synced objects (Phase 3/4). One table for all record kinds — 'entry',
+-- 'strand', and later media pointers — so the sync path is uniform. content is
+-- always an opaque JSON CipherBlob. seq is a per-user monotonic counter across
+-- all kinds; the pull cursor is "everything with seq > since".
+CREATE TABLE IF NOT EXISTS objects (
   user_id     TEXT NOT NULL REFERENCES users(id),
-  id          TEXT NOT NULL,          -- client-assigned entry id
+  kind        TEXT NOT NULL,          -- 'entry' | 'strand' | ...
+  id          TEXT NOT NULL,          -- client-assigned id
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL,
   deleted     INTEGER NOT NULL DEFAULT 0,
   content     TEXT NOT NULL,          -- JSON CipherBlob (opaque)
-  seq         INTEGER NOT NULL,       -- per-user monotonic; the pull cursor
-  PRIMARY KEY (user_id, id)
+  seq         INTEGER NOT NULL,
+  PRIMARY KEY (user_id, kind, id)
 );
-CREATE INDEX IF NOT EXISTS entries_by_seq ON entries(user_id, seq);
+CREATE INDEX IF NOT EXISTS objects_by_seq ON objects(user_id, seq);
