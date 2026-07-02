@@ -108,3 +108,15 @@ CREATE TABLE IF NOT EXISTS feedback (
   contact    TEXT,                    -- optional, if they want a reply
   user_id    TEXT                     -- set only if they happened to be signed in
 );
+
+-- ---- Rate limiting -------------------------------------------------------
+-- Fixed-window counters keyed by action + IP + time-bucket, to blunt abuse of
+-- the open endpoints (register / login / feedback). Only these low-frequency
+-- paths are limited; the authenticated sync path is not. Rows expire with their
+-- window and are swept opportunistically.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key        TEXT PRIMARY KEY,        -- "<action>:<ip>:<windowBucket>"
+  count      INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS rate_limits_by_expiry ON rate_limits(expires_at);

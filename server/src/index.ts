@@ -37,12 +37,41 @@ async function requireAuth(c: AppContext, next: Next) {
   await next();
 }
 
+// Fixed-window rate limit for the open endpoints. Returns true if the request
+// is within the limit. Keyed by action + client IP + time bucket; one upsert
+// (RETURNING the running count) plus an occasional sweep of expired rows. Only
+// guards low-frequency abuse surfaces — never the authenticated sync path.
+async function withinRateLimit(
+  c: AppContext,
+  action: string,
+  limit: number,
+  windowMs: number
+): Promise<boolean> {
+  const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
+  const key = `${action}:${ip}:${Math.floor(Date.now() / windowMs)}`;
+  try {
+    const row = await c.env.DB.prepare(
+      "INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET count = count + 1 RETURNING count"
+    )
+      .bind(key, Date.now() + windowMs)
+      .first<{ count: number }>();
+    if (Math.random() < 0.02) {
+      await c.env.DB.prepare("DELETE FROM rate_limits WHERE expires_at < ?").bind(Date.now()).run();
+    }
+    return (row?.count ?? 1) <= limit;
+  } catch {
+    return true; // never let the limiter itself take the service down
+  }
+}
+const TOO_MANY = "Too many attempts from here — please wait a little and try again.";
+
 app.get("/health", (c) => c.json({ ok: true, service: "driftless-server" }));
 
 // A calm "note to the maker". Open (no account needed) so even a first-time
 // visitor can send a word. Stored separately from journal data; it's a plain
 // message, never touching any ciphertext. Optional token just attributes it.
 app.post("/feedback", async (c) => {
+  if (!(await withinRateLimit(c, "feedback", 8, 3_600_000))) return c.json({ error: TOO_MANY }, 429);
   const b = await c.req.json().catch(() => null);
   const message = (b?.message ?? "").toString().trim();
   if (!message) return c.json({ error: "Say a little something first." }, 400);
@@ -515,6 +544,7 @@ app.post("/shared/:id/invites/:inviteId/revoke", requireAuth, async (c) => {
 
 // Create an account + store the vault metadata and identity public key.
 app.post("/auth/register", async (c) => {
+  if (!(await withinRateLimit(c, "register", 10, 3_600_000))) return c.json({ error: TOO_MANY }, 429);
   const body = await c.req.json().catch(() => null);
   const email = (body?.email ?? "").trim().toLowerCase();
   const password = body?.password ?? "";
@@ -549,6 +579,7 @@ app.post("/auth/register", async (c) => {
 });
 
 app.post("/auth/login", async (c) => {
+  if (!(await withinRateLimit(c, "login", 30, 900_000))) return c.json({ error: TOO_MANY }, 429);
   const body = await c.req.json().catch(() => null);
   const email = (body?.email ?? "").trim().toLowerCase();
   const password = body?.password ?? "";
