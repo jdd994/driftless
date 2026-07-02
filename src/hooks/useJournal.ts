@@ -22,6 +22,14 @@ import {
   generateDEK,
   wrapDEKForRecipient,
   unwrapDEK,
+  randomLinkSecret,
+  deriveInviteKeys,
+  sha256B64,
+  linkWrapDEK,
+  linkUnwrapDEK,
+  b64url,
+  fromB64url,
+  toBase64,
   PBKDF2_ITERATIONS,
 } from "../lib/crypto";
 import { compressImage, bytesToBase64 } from "../lib/media";
@@ -65,6 +73,9 @@ import {
   sharedMembers,
   sharedLeave,
   sharedRemove,
+  createInviteLink as apiCreateInviteLink,
+  joinClaim,
+  joinFinish,
   type SharedRecord,
   type StrandMember,
 } from "../lib/api";
@@ -1072,6 +1083,56 @@ export function useJournal() {
     [publishShared]
   );
 
+  // Mint a shareable invite link for a strand: a random secret → HKDF wrapKey
+  // (encrypts the DEK, opaque to the server) + joinProof (server stores only its
+  // hash). The secret rides in the URL fragment, never sent to the server.
+  const createInviteLink = useCallback(
+    async (strandId: string): Promise<{ link: string } | { error: string }> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return { error: "This strand isn't ready to share yet." };
+      try {
+        const linkSecret = randomLinkSecret();
+        const { wrapKey, joinProof } = await deriveInviteKeys(linkSecret);
+        const inviteId = uid();
+        const wrappedDEK = await linkWrapDEK(wrapKey, live.dek);
+        const joinProofHash = await sha256B64(joinProof);
+        const expiresAt = Date.now() + 7 * 86_400_000; // 7 days
+        await apiCreateInviteLink(token, strandId, inviteId, wrappedDEK, joinProofHash, live.dekEpoch, expiresAt, 20);
+        return { link: `${location.origin}/#join=${inviteId}.${b64url(linkSecret)}` };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Couldn't create a link." };
+      }
+    },
+    []
+  );
+
+  // Redeem an invite link: prove the joinProof → get the wrapped DEK → unwrap
+  // with the link's wrapKey → re-wrap to our own identity → register membership.
+  const joinViaInvite = useCallback(
+    async (inviteId: string, linkSecretB64: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      if (!token) return "Connect an account to join.";
+      await ensureIdentity();
+      const kp = identityRef.current;
+      if (!kp) return "Sharing isn't ready yet — try again in a moment.";
+      try {
+        const { wrapKey, joinProof } = await deriveInviteKeys(fromB64url(linkSecretB64));
+        const proofB64 = toBase64(joinProof);
+        const claim = await joinClaim(token, inviteId, proofB64);
+        const dek = await linkUnwrapDEK(wrapKey, claim.wrappedDEK);
+        const selfPub = await exportPublicKeyB64(kp.publicKey);
+        const { ephemeralPub, wrappedDEK } = await wrapDEKForRecipient(selfPub, dek);
+        await joinFinish(token, inviteId, proofB64, ephemeralPub, wrappedDEK);
+        await loadSharedStrands();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't join with that link.";
+      }
+    },
+    [ensureIdentity, loadSharedStrands]
+  );
+
   // ---- Sync account (opt-in) --------------------------------------------
 
 
@@ -1161,6 +1222,8 @@ export function useJournal() {
     fetchStrandMembers,
     removeSharedMember,
     leaveSharedStrand,
+    createInviteLink,
+    joinViaInvite,
     refreshShared: loadSharedStrands,
   };
 }

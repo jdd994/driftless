@@ -210,3 +210,44 @@ export function sharedRemove(
 ): Promise<{ ok: boolean }> {
   return req(`/shared/${strandId}/remove`, { method: "POST", token, body: { userId } });
 }
+
+// ---- invite links (S6) ----
+
+export function createInviteLink(
+  token: string,
+  strandId: string,
+  inviteId: string,
+  wrappedDEK: CipherBlob,
+  joinProofHash: string,
+  dekEpoch: number,
+  expiresAt: number,
+  maxUses: number
+): Promise<{ ok: boolean; inviteId: string }> {
+  return req(`/shared/${strandId}/invite-link`, {
+    method: "POST",
+    token,
+    body: { inviteId, wrappedDEK, joinProofHash, dekEpoch, expiresAt, maxUses },
+  });
+}
+
+export function joinClaim(
+  token: string,
+  inviteId: string,
+  joinProof: string
+): Promise<{ strandId: string; wrappedDEK: CipherBlob; dekEpoch: number }> {
+  return req("/shared/join/claim", { method: "POST", token, body: { inviteId, joinProof } });
+}
+
+export function joinFinish(
+  token: string,
+  inviteId: string,
+  joinProof: string,
+  ephemeralPub: string,
+  wrappedDEK: WrappedKey
+): Promise<{ ok: boolean; strandId: string }> {
+  return req("/shared/join/finish", {
+    method: "POST",
+    token,
+    body: { inviteId, joinProof, ephemeralPub, wrappedDEK },
+  });
+}

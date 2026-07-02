@@ -154,12 +154,16 @@ gives forward secrecy for *future* content.
    no schema change, same forward-secrecy property (family strands are small, so
    re-encrypting all pieces on the rare removal is cheap). *Deferred:* ownership
    transfer (owner can't leave yet); reorder/delete of shared pieces.
-5. **S6 — Invite by link (build a family painlessly).** *Next up — designed
-   below.* A private link you send through your own channel (text, in person)
-   lets someone join a strand without you knowing their account email and
-   without them pre-registering. **No user search, ever** (that's a directory /
-   social graph — against the soul). The link is an intentional, revocable
-   capability, and the server still only holds ciphertext.
+5. ✅ **S6 — Invite by link (build a family painlessly).** A private link you send
+   through your own channel lets someone join a strand without you knowing their
+   email or them pre-registering. Link secret rides in the URL fragment; HKDF →
+   wrapKey (encrypts DEK, opaque to server) + joinProof (server stores only its
+   hash). Opening the link stashes it, guides the newcomer through setup, then
+   auto-joins (claim → unwrap → re-wrap to self → finish). Reusable, revocable,
+   7-day expiry; removal/re-key auto-revokes outstanding links. **No user search,
+   ever.** **Done & deployed; verified 11/11** against the live server (create,
+   bad-proof reject, join+decrypt, co-author, reusable, revoke, expiry, used-up,
+   removal-revokes-links). Design details below.
 6. **S5 — Social recovery.** The family together restores a member who lost their
    passphrase — K-of-N Shamir secret sharing of a recovery secret, each share
    wrapped to a member's public key; the server holds no usable share. The

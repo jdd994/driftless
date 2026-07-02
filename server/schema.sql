@@ -76,6 +76,27 @@ CREATE TABLE IF NOT EXISTS shared_objects (
 );
 CREATE INDEX IF NOT EXISTS shared_objects_by_seq ON shared_objects(strand_id, seq);
 
+-- ---- Invite links (S6) ---------------------------------------------------
+-- A shareable link that lets someone join a shared strand without an email
+-- exchange. The link's secret lives in the URL fragment (never sent here); the
+-- client derives a wrapKey (encrypts the DEK below — opaque to us) and a
+-- joinProof (we store only its hash). So a breach yields neither the strand key
+-- nor a way to join. See SHARING_PLAN.md (S6).
+CREATE TABLE IF NOT EXISTS strand_invites (
+  invite_id       TEXT PRIMARY KEY,
+  strand_id       TEXT NOT NULL REFERENCES shared_strands(strand_id),
+  created_by      TEXT NOT NULL,
+  wrapped_dek     TEXT NOT NULL,       -- DEK encrypted with the link's wrapKey (JSON CipherBlob)
+  join_proof_hash TEXT NOT NULL,       -- base64(SHA-256(joinProof))
+  dek_epoch       INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL,
+  revoked         INTEGER NOT NULL DEFAULT 0,
+  max_uses        INTEGER NOT NULL DEFAULT 20,
+  uses            INTEGER NOT NULL DEFAULT 0,
+  created_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS strand_invites_by_strand ON strand_invites(strand_id);
+
 -- ---- Feedback ------------------------------------------------------------
 -- A calm "note to the maker" box in the app. NOT part of the journal and NOT
 -- end-to-end encrypted — it's a plain message the writer chose to send. Kept

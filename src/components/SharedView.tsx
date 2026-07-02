@@ -16,6 +16,7 @@ type Props = {
   onMembers: (strandId: string) => Promise<StrandMember[]>;
   onRemoveMember: (strandId: string, userId: string) => Promise<string | null>;
   onLeave: (strandId: string) => Promise<string | null>;
+  onCreateLink: (strandId: string) => Promise<{ link: string } | { error: string }>;
   onRefresh: () => void;
 };
 
@@ -72,6 +73,7 @@ export function SharedView(props: Props) {
         onBack={() => setSelectedId(null)}
         onInvite={props.onInvite}
         onWrite={props.onWrite}
+        onCreateLink={props.onCreateLink}
         onMembers={props.onMembers}
         onRemoveMember={props.onRemoveMember}
         onLeave={async (id) => {
@@ -139,6 +141,7 @@ function SharedDetail({
   onBack,
   onInvite,
   onWrite,
+  onCreateLink,
   onMembers,
   onRemoveMember,
   onLeave,
@@ -147,10 +150,43 @@ function SharedDetail({
   onBack: () => void;
   onInvite: (strandId: string, email: string) => Promise<string | null>;
   onWrite: (strandId: string, text: string) => Promise<string | null>;
+  onCreateLink: (strandId: string) => Promise<{ link: string } | { error: string }>;
   onMembers: (strandId: string) => Promise<StrandMember[]>;
   onRemoveMember: (strandId: string, userId: string) => Promise<string | null>;
   onLeave: (strandId: string) => Promise<string | null>;
 }) {
+  const [link, setLink] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkErr, setLinkErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  async function createLink() {
+    setLinkBusy(true);
+    setLinkErr(null);
+    const res = await onCreateLink(strand.strandId);
+    setLinkBusy(false);
+    if ("error" in res) setLinkErr(res.error);
+    else setLink(res.link);
+  }
+  async function copyLink() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard blocked — the link is visible to copy by hand
+    }
+  }
+  async function shareLink() {
+    if (!link) return;
+    try {
+      await navigator.share({ text: "Join me in a shared journal on Driftless:", url: link });
+    } catch {
+      // share sheet dismissed — no-op
+    }
+  }
   const isOwner = strand.role === "owner";
   const [compose, setCompose] = useState("");
   const [busy, setBusy] = useState(false);
@@ -304,6 +340,37 @@ function SharedDetail({
             Only people you invite can read this. It's encrypted end-to-end — the
             server can't.
           </p>
+
+          <div className="share-or">— or share a link —</div>
+          {!link ? (
+            <button className="ghost-btn" onClick={createLink} disabled={linkBusy}>
+              {linkBusy ? "Making a link…" : "Create an invite link"}
+            </button>
+          ) : (
+            <div className="share-link-box">
+              <input
+                className="anchor-input share-link-input"
+                readOnly
+                value={link}
+                onFocus={(e) => e.target.select()}
+              />
+              <div className="share-link-actions">
+                <button className="save-btn" onClick={copyLink}>
+                  {copied ? "Copied ✓" : "Copy link"}
+                </button>
+                {canShare && (
+                  <button className="ghost-btn" onClick={shareLink}>
+                    Share…
+                  </button>
+                )}
+              </div>
+              <p className="share-hint">
+                Anyone with this link can join, so send it privately (a text, in
+                person). It works for 7 days.
+              </p>
+            </div>
+          )}
+          {linkErr && <p className="share-error">{linkErr}</p>}
         </div>
       )}
 

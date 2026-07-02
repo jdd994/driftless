@@ -37,6 +37,27 @@ function Clock() {
   );
 }
 
+const PENDING_INVITE_KEY = "driftless-pending-invite";
+
+// If the app was opened via an invite link (`#join=<id>.<secret>`), capture it,
+// stash it (so it survives first-run setup / unlock), and strip the secret from
+// the URL so it isn't left in history or accidentally re-shared.
+function readPendingInvite(): { inviteId: string; secret: string } | null {
+  try {
+    const m = /^#join=([^.]+)\.(.+)$/.exec(location.hash);
+    if (m) {
+      const pi = { inviteId: m[1], secret: m[2] };
+      localStorage.setItem(PENDING_INVITE_KEY, JSON.stringify(pi));
+      history.replaceState(null, "", location.pathname + location.search);
+      return pi;
+    }
+    const stored = localStorage.getItem(PENDING_INVITE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const j = useJournal();
   const [query, setQuery] = useState("");
@@ -46,8 +67,31 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<ToastData>(null);
   const [veil, setVeil] = useState(0);
+  const [pendingInvite, setPendingInvite] = useState(() => readPendingInvite());
   const toastTimer = useRef<number | null>(null);
+  const joiningRef = useRef(false);
   const settings = useSettings();
+
+  // Once we're open and connected, redeem any pending invite link and land the
+  // person in the strand. If they're set up but haven't connected an account, a
+  // banner (below) points them to it; the invite waits until then.
+  useEffect(() => {
+    if (!pendingInvite || j.vaultState !== "open" || !j.account || joiningRef.current) return;
+    joiningRef.current = true;
+    (async () => {
+      const err = await j.joinViaInvite(pendingInvite.inviteId, pendingInvite.secret);
+      joiningRef.current = false;
+      localStorage.removeItem(PENDING_INVITE_KEY);
+      setPendingInvite(null);
+      if (err) {
+        showToast({ msg: err });
+      } else {
+        setView("shared");
+        showToast({ msg: "You've joined the shared strand." });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInvite, j.vaultState, j.account]);
 
   // Auto night-dimming: warm veil follows the local clock — 0 at midday,
   // deepest around 1am — so the app is never harsh at 3am. Off when disabled.
@@ -251,6 +295,15 @@ export default function App() {
 
       <InstallHint />
 
+      {pendingInvite && !j.account && (
+        <div className="join-banner">
+          <span>You've been invited to a shared strand. Connect an account to join it.</span>
+          <button className="install-btn" onClick={() => setShowSettings(true)}>
+            Connect
+          </button>
+        </div>
+      )}
+
       <Capture onKeep={j.addEntry} />
 
       <div className="viewtabs" role="tablist">
@@ -370,6 +423,7 @@ export default function App() {
           onMembers={j.fetchStrandMembers}
           onRemoveMember={j.removeSharedMember}
           onLeave={j.leaveSharedStrand}
+          onCreateLink={j.createInviteLink}
           onRefresh={j.refreshShared}
         />
       )}

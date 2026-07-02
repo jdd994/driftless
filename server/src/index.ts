@@ -375,6 +375,141 @@ app.post("/shared/:id/remove", requireAuth, async (c) => {
   await c.env.DB.prepare("DELETE FROM strand_members WHERE strand_id = ? AND user_id = ?")
     .bind(strandId, target)
     .run();
+  // A removal triggers a client-side re-key, so any outstanding invite links
+  // (which carry the OLD DEK) must die — a new one can be made after.
+  await c.env.DB.prepare("UPDATE strand_invites SET revoked = 1 WHERE strand_id = ?").bind(strandId).run();
+  return c.json({ ok: true });
+});
+
+// ---- Invite links (S6) ---------------------------------------------------
+// The server holds only opaque ciphertext (the DEK wrapped with the link's
+// wrapKey) + a hash of the joinProof. It can neither read the strand nor forge
+// a join. See SHARING_PLAN.md.
+
+function b64ToBytes(s: string): Uint8Array {
+  const bin = atob(s);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+async function sha256B64(bytes: Uint8Array): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  let s = "";
+  for (let i = 0; i < d.length; i++) s += String.fromCharCode(d[i]);
+  return btoa(s);
+}
+
+type InviteRow = {
+  invite_id: string;
+  strand_id: string;
+  wrapped_dek: string;
+  join_proof_hash: string;
+  dek_epoch: number;
+  expires_at: number;
+  revoked: number;
+  max_uses: number;
+  uses: number;
+};
+
+// Member creates a shareable invite link for their strand.
+app.post("/shared/:id/invite-link", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  const b = await c.req.json().catch(() => null);
+  const { inviteId, wrappedDEK, joinProofHash, dekEpoch, expiresAt, maxUses } = b ?? {};
+  if (
+    typeof inviteId !== "string" ||
+    !isCipherBlob(wrappedDEK) ||
+    typeof joinProofHash !== "string" ||
+    typeof dekEpoch !== "number" ||
+    typeof expiresAt !== "number"
+  ) {
+    return c.json({ error: "missing fields" }, 400);
+  }
+  const mu = typeof maxUses === "number" && maxUses > 0 ? Math.min(Math.floor(maxUses), 1000) : 20;
+  await c.env.DB.prepare(
+    `INSERT INTO strand_invites (invite_id, strand_id, created_by, wrapped_dek, join_proof_hash, dek_epoch, expires_at, revoked, max_uses, uses, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?)`
+  )
+    .bind(inviteId, strandId, c.get("userId"), JSON.stringify(wrappedDEK), joinProofHash, dekEpoch, expiresAt, mu, Date.now())
+    .run();
+  return c.json({ ok: true, inviteId });
+});
+
+// A signed-in user redeems a link: prove possession of the joinProof, get back
+// the wrapped DEK to unwrap client-side.
+app.post("/shared/join/claim", requireAuth, async (c) => {
+  const b = await c.req.json().catch(() => null);
+  const { inviteId, joinProof } = b ?? {};
+  if (typeof inviteId !== "string" || typeof joinProof !== "string") return c.json({ error: "missing fields" }, 400);
+  const inv = await c.env.DB.prepare("SELECT * FROM strand_invites WHERE invite_id = ?").bind(inviteId).first<InviteRow>();
+  if (!inv) return c.json({ error: "This invite link isn't valid." }, 404);
+  if (inv.revoked) return c.json({ error: "This invite link was turned off." }, 410);
+  if (inv.expires_at < Date.now()) return c.json({ error: "This invite link has expired." }, 410);
+  if (inv.uses >= inv.max_uses) return c.json({ error: "This invite link has been used up." }, 410);
+  if ((await sha256B64(b64ToBytes(joinProof))) !== inv.join_proof_hash)
+    return c.json({ error: "This invite link isn't valid." }, 403);
+  return c.json({ strandId: inv.strand_id, wrappedDEK: JSON.parse(inv.wrapped_dek), dekEpoch: inv.dek_epoch });
+});
+
+// …then registers their membership (DEK re-wrapped to their own identity key).
+app.post("/shared/join/finish", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const b = await c.req.json().catch(() => null);
+  const { inviteId, joinProof, ephemeralPub, wrappedDEK } = b ?? {};
+  // wrappedDEK here is the DEK re-wrapped to the joiner's identity key — a
+  // WrappedKey (base64 strings), like every member wrap, not a CipherBlob.
+  if (typeof inviteId !== "string" || typeof joinProof !== "string" || typeof ephemeralPub !== "string" || !wrappedDEK) {
+    return c.json({ error: "missing fields" }, 400);
+  }
+  const inv = await c.env.DB.prepare("SELECT * FROM strand_invites WHERE invite_id = ?").bind(inviteId).first<InviteRow>();
+  if (!inv) return c.json({ error: "This invite link isn't valid." }, 404);
+  if (inv.revoked || inv.expires_at < Date.now() || inv.uses >= inv.max_uses)
+    return c.json({ error: "This invite link is no longer valid." }, 410);
+  if ((await sha256B64(b64ToBytes(joinProof))) !== inv.join_proof_hash)
+    return c.json({ error: "This invite link isn't valid." }, 403);
+  const already = await membership(c.env.DB, inv.strand_id, userId);
+  if (!already) {
+    await c.env.DB.prepare(
+      `INSERT INTO strand_members (strand_id, user_id, role, ephemeral_pub, wrapped_dek, dek_epoch, added_at)
+       VALUES (?, ?, 'member', ?, ?, ?, ?)
+       ON CONFLICT(strand_id, user_id) DO UPDATE SET ephemeral_pub = excluded.ephemeral_pub, wrapped_dek = excluded.wrapped_dek, dek_epoch = excluded.dek_epoch`
+    )
+      .bind(inv.strand_id, userId, ephemeralPub, JSON.stringify(wrappedDEK), inv.dek_epoch, Date.now())
+      .run();
+    await c.env.DB.prepare("UPDATE strand_invites SET uses = uses + 1 WHERE invite_id = ?").bind(inviteId).run();
+  }
+  return c.json({ ok: true, strandId: inv.strand_id });
+});
+
+// List a strand's active invite links (for showing / revoking). No secrets here.
+app.get("/shared/:id/invites", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  const rows = await c.env.DB.prepare(
+    "SELECT invite_id, expires_at, revoked, max_uses, uses, created_at FROM strand_invites WHERE strand_id = ? ORDER BY created_at DESC"
+  )
+    .bind(strandId)
+    .all<{ invite_id: string; expires_at: number; revoked: number; max_uses: number; uses: number; created_at: number }>();
+  return c.json({
+    invites: (rows.results ?? []).map((r) => ({
+      inviteId: r.invite_id,
+      expiresAt: r.expires_at,
+      revoked: r.revoked === 1,
+      maxUses: r.max_uses,
+      uses: r.uses,
+      createdAt: r.created_at,
+    })),
+  });
+});
+
+app.post("/shared/:id/invites/:inviteId/revoke", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  const inviteId = c.req.param("inviteId")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  await c.env.DB.prepare("UPDATE strand_invites SET revoked = 1 WHERE invite_id = ? AND strand_id = ?")
+    .bind(inviteId, strandId)
+    .run();
   return c.json({ ok: true });
 });
 

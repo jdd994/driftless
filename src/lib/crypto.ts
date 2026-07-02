@@ -262,6 +262,70 @@ export async function unwrapDEK(
   return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, true, ["encrypt", "decrypt"]);
 }
 
+// ---- Invite links (S6) --------------------------------------------------
+// A link carries a random secret in its URL fragment. From it we derive two
+// independent HKDF sub-keys: a wrapKey that encrypts the strand DEK (opaque to
+// the server) and a joinProof the server checks only by hash. See SHARING_PLAN.
+
+export function randomLinkSecret(): Uint8Array {
+  return randomBytes(32);
+}
+
+export function toBase64(u8: Uint8Array): string {
+  return b64(u8);
+}
+
+// URL-fragment-safe base64 for the link secret.
+export function b64url(u8: Uint8Array): string {
+  return b64(u8).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+export function fromB64url(s: string): Uint8Array {
+  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+  return fromB64(s.replace(/-/g, "+").replace(/_/g, "/") + pad);
+}
+
+export async function deriveInviteKeys(
+  linkSecret: Uint8Array
+): Promise<{ wrapKey: CryptoKey; joinProof: Uint8Array }> {
+  const base = await crypto.subtle.importKey("raw", toBuf(linkSecret), "HKDF", false, ["deriveBits"]);
+  const salt = new Uint8Array(0);
+  const wrapBits = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: toBuf(salt), info: enc.encode("driftless-invite-wrap") },
+    base,
+    256
+  );
+  const wrapKey = await crypto.subtle.importKey("raw", wrapBits, { name: "AES-GCM" }, false, [
+    "encrypt",
+    "decrypt",
+  ]);
+  const proofBits = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: toBuf(salt), info: enc.encode("driftless-invite-proof") },
+    base,
+    256
+  );
+  return { wrapKey, joinProof: new Uint8Array(proofBits) };
+}
+
+export async function sha256B64(bytes: Uint8Array): Promise<string> {
+  return b64(new Uint8Array(await crypto.subtle.digest("SHA-256", toBuf(bytes))));
+}
+
+export async function linkWrapDEK(wrapKey: CryptoKey, dek: CryptoKey): Promise<CipherBlob> {
+  const raw = await crypto.subtle.exportKey("raw", dek);
+  const iv = randomBytes(12);
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: toBuf(iv) }, wrapKey, raw);
+  return { iv: Array.from(iv), data: Array.from(new Uint8Array(ct)) };
+}
+
+export async function linkUnwrapDEK(wrapKey: CryptoKey, blob: CipherBlob): Promise<CryptoKey> {
+  const raw = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: toBuf(new Uint8Array(blob.iv)) },
+    wrapKey,
+    toBuf(new Uint8Array(blob.data))
+  );
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, true, ["encrypt", "decrypt"]);
+}
+
 // A small known token, encrypted at setup. On unlock we try to decrypt it;
 // success means the passphrase was correct. AES-GCM fails loudly on a wrong
 // key, so this never produces a false positive.
