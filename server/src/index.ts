@@ -152,6 +152,7 @@ app.post("/auth/register", async (c) => {
   const password = body?.password ?? "";
   const vault = body?.vault;
   const identityPublicKey = body?.identityPublicKey ?? null;
+  const identityPrivWrapped = body?.identityPrivWrapped ?? null;
 
   if (!email || !password || !vault || !Array.isArray(vault.salt) || !vault.verifier) {
     return c.json({ error: "Missing email, password, or vault." }, 400);
@@ -171,8 +172,8 @@ app.post("/auth/register", async (c) => {
       "INSERT INTO users (id, email, pw_hash, pw_salt, identity_pub, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).bind(userId, email, hashB64, saltB64, identityPublicKey, now),
     c.env.DB.prepare(
-      "INSERT INTO vaults (user_id, salt, verifier, iterations, created_at) VALUES (?, ?, ?, ?, ?)"
-    ).bind(userId, JSON.stringify(vault.salt), JSON.stringify(vault.verifier), vault.iterations ?? 600000, now),
+      "INSERT INTO vaults (user_id, salt, verifier, iterations, identity_priv_wrapped, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(userId, JSON.stringify(vault.salt), JSON.stringify(vault.verifier), vault.iterations ?? 600000, identityPrivWrapped ? JSON.stringify(identityPrivWrapped) : null, now),
   ]);
 
   const token = await signToken(userId, c.env.TOKEN_SECRET);
@@ -200,19 +201,44 @@ app.post("/auth/login", async (c) => {
   return c.json({ token, userId: user.id });
 });
 
-// The vault metadata, so a new device can re-derive the key from the passphrase.
+// The vault metadata, so a new device can re-derive the key from the passphrase
+// and recover the (wrapped) identity private key + public key.
 app.get("/vault", requireAuth, async (c) => {
+  const userId = c.get("userId");
   const v = await c.env.DB.prepare(
-    "SELECT salt, verifier, iterations FROM vaults WHERE user_id = ?"
+    "SELECT salt, verifier, iterations, identity_priv_wrapped FROM vaults WHERE user_id = ?"
   )
-    .bind(c.get("userId"))
-    .first<{ salt: string; verifier: string; iterations: number }>();
+    .bind(userId)
+    .first<{ salt: string; verifier: string; iterations: number; identity_priv_wrapped: string | null }>();
   if (!v) return c.json({ error: "No vault found." }, 404);
+  const u = await c.env.DB.prepare("SELECT identity_pub FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ identity_pub: string | null }>();
   return c.json({
     salt: JSON.parse(v.salt),
     verifier: JSON.parse(v.verifier),
     iterations: v.iterations,
+    identityPublicKey: u?.identity_pub ?? null,
+    identityPrivWrapped: v.identity_priv_wrapped ? JSON.parse(v.identity_priv_wrapped) : null,
   });
+});
+
+// Set/update this account's identity keypair (public + wrapped private). Used to
+// migrate accounts created before identity keys existed, and for rotation.
+app.post("/identity", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json().catch(() => null);
+  const pub = body?.identityPublicKey;
+  const wrapped = body?.identityPrivWrapped;
+  if (typeof pub !== "string" || !wrapped) return c.json({ error: "missing identity keys" }, 400);
+  await c.env.DB.batch([
+    c.env.DB.prepare("UPDATE users SET identity_pub = ? WHERE id = ?").bind(pub, userId),
+    c.env.DB.prepare("UPDATE vaults SET identity_priv_wrapped = ? WHERE user_id = ?").bind(
+      JSON.stringify(wrapped),
+      userId
+    ),
+  ]);
+  return c.json({ ok: true });
 });
 
 // Public-key directory — unused until sharing, but live from the start.

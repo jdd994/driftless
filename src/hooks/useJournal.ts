@@ -14,6 +14,11 @@ import {
   newSalt,
   exportKeyRaw,
   importKeyRaw,
+  generateIdentityKeypair,
+  exportPublicKeyB64,
+  importPublicKeyB64,
+  wrapPrivateKey,
+  unwrapPrivateKey,
   PBKDF2_ITERATIONS,
 } from "../lib/crypto";
 import { compressImage, bytesToBase64 } from "../lib/media";
@@ -43,7 +48,7 @@ import {
   type StoredStrand,
   type VaultMeta,
 } from "../lib/db";
-import { register, login, fetchVault } from "../lib/api";
+import { register, login, fetchVault, setIdentity } from "../lib/api";
 import { syncNow } from "../lib/sync";
 import {
   uid,
@@ -75,6 +80,7 @@ export function useJournal() {
   const syncingRef = useRef(false);
   const syncTimer = useRef<number | null>(null);
   const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → object URL (decrypted, in-memory)
+  const identityRef = useRef<CryptoKeyPair | null>(null); // ECDH keypair for sharing (in-memory)
 
   // Decide on first paint whether we need setup or unlock.
   useEffect(() => {
@@ -163,11 +169,37 @@ export function useJournal() {
     syncTimer.current = window.setTimeout(() => void runSync(), 1500);
   }, [runSync]);
 
+  // Ensure this account has an identity keypair (the foundation for sharing).
+  // Recover it from the server-wrapped private key, or generate + upload one
+  // (also migrates accounts created before identity keys existed). Held in
+  // memory only; the private key never leaves unwrapped.
+  const ensureIdentity = useCallback(async () => {
+    const token = tokenRef.current;
+    const key = keyRef.current;
+    if (!token || !key || identityRef.current) return;
+    try {
+      const v = await fetchVault(token);
+      if (v.identityPublicKey && v.identityPrivWrapped) {
+        identityRef.current = {
+          publicKey: await importPublicKeyB64(v.identityPublicKey),
+          privateKey: await unwrapPrivateKey(key, v.identityPrivWrapped),
+        };
+      } else {
+        const kp = await generateIdentityKeypair();
+        await setIdentity(token, await exportPublicKeyB64(kp.publicKey), await wrapPrivateKey(key, kp.privateKey));
+        identityRef.current = kp;
+      }
+    } catch {
+      // offline / transient — a later open will retry
+    }
+  }, []);
+
   // Background sync while open: on unlock, on reconnect, on returning to the
   // app, and on a gentle interval.
   useEffect(() => {
     if (vaultState !== "open" || !tokenRef.current) return;
     void runSync();
+    void ensureIdentity();
     const onOnline = () => void runSync();
     const onVis = () => document.visibilityState === "visible" && runSync();
     window.addEventListener("online", onOnline);
@@ -178,7 +210,7 @@ export function useJournal() {
       document.removeEventListener("visibilitychange", onVis);
       clearInterval(id);
     };
-  }, [vaultState, runSync]);
+  }, [vaultState, runSync, ensureIdentity]);
 
   // First run: choose a passphrase, create the vault.
   const createVault = useCallback(
@@ -263,6 +295,7 @@ export function useJournal() {
     setEntries([]);
     setStrands([]);
     mediaUrls.current.clear(); // free decrypted image data URLs from memory
+    identityRef.current = null;
     setVaultState("locked");
   }, []);
 
@@ -645,12 +678,15 @@ export function useJournal() {
       if (!v || !keyRef.current) return "Unlock your journal first.";
       const em = email.trim().toLowerCase();
       try {
+        const kp = await generateIdentityKeypair();
         const { token } = await register(
           em,
           password,
           { salt: v.salt, verifier: v.verifier, iterations: v.iterations },
-          ""
+          await exportPublicKeyB64(kp.publicKey),
+          await wrapPrivateKey(keyRef.current, kp.privateKey)
         );
+        identityRef.current = kp;
         tokenRef.current = token;
         await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
         setAccount(em);

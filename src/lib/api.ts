@@ -3,7 +3,7 @@
 // ciphertext + non-secret metadata only, never plaintext or the passphrase.
 // See ../SYNC_PLAN.md. Nothing here runs until the sync engine (Phase 4) wires
 // it in.
-import type { CipherBlob } from "./crypto";
+import type { CipherBlob, WrappedKey } from "./crypto";
 
 // The sync server. (Swap for a custom domain later; also update connect-src in
 // public/_headers if this origin changes.)
@@ -33,6 +33,8 @@ export type VaultMetaDTO = {
   salt: number[];
   verifier: CipherBlob;
   iterations?: number;
+  identityPublicKey?: string | null;
+  identityPrivWrapped?: WrappedKey | null;
 };
 
 type ReqOpts = { method?: string; token?: string; body?: unknown };
@@ -57,12 +59,22 @@ export function register(
   email: string,
   password: string,
   vault: VaultMetaDTO,
-  identityPublicKey: string
+  identityPublicKey: string,
+  identityPrivWrapped: WrappedKey
 ): Promise<{ token: string; userId: string }> {
   return req("/auth/register", {
     method: "POST",
-    body: { email, password, vault, identityPublicKey },
+    body: { email, password, vault, identityPublicKey, identityPrivWrapped },
   });
+}
+
+// Set/update this account's identity keypair (migrate old accounts + rotation).
+export function setIdentity(
+  token: string,
+  identityPublicKey: string,
+  identityPrivWrapped: WrappedKey
+): Promise<{ ok: boolean }> {
+  return req("/identity", { method: "POST", token, body: { identityPublicKey, identityPrivWrapped } });
 }
 
 export function login(

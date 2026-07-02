@@ -159,6 +159,55 @@ export async function decryptBytes(key: CryptoKey, blob: CipherBytes): Promise<A
   return crypto.subtle.decrypt({ name: "AES-GCM", iv: toBuf(blob.iv) }, key, blob.data);
 }
 
+// ---- Identity keypair (ECDH P-256) for sharing --------------------------
+// Public key: shared so others can encrypt to you. Private key: wrapped by the
+// vault key and stored (device + server-wrapped), so it survives to a new
+// device once the passphrase unlocks the vault. See SHARING_PLAN.md.
+
+function b64(u8: Uint8Array): string {
+  let s = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < u8.length; i += chunk) s += String.fromCharCode(...u8.subarray(i, i + chunk));
+  return btoa(s);
+}
+function fromB64(s: string): Uint8Array {
+  const bin = atob(s);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+
+export type WrappedKey = { iv: string; data: string }; // base64
+
+export function generateIdentityKeypair(): Promise<CryptoKeyPair> {
+  return crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, [
+    "deriveKey",
+    "deriveBits",
+  ]);
+}
+
+export async function exportPublicKeyB64(pub: CryptoKey): Promise<string> {
+  return b64(new Uint8Array(await crypto.subtle.exportKey("spki", pub)));
+}
+
+export function importPublicKeyB64(s: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey("spki", toBuf(fromB64(s)), { name: "ECDH", namedCurve: "P-256" }, true, []);
+}
+
+export async function wrapPrivateKey(vaultKey: CryptoKey, priv: CryptoKey): Promise<WrappedKey> {
+  const pkcs8 = await crypto.subtle.exportKey("pkcs8", priv);
+  const cb = await encryptBytes(vaultKey, pkcs8);
+  return { iv: b64(cb.iv), data: b64(new Uint8Array(cb.data)) };
+}
+
+export async function unwrapPrivateKey(vaultKey: CryptoKey, w: WrappedKey): Promise<CryptoKey> {
+  const bytes = await decryptBytes(vaultKey, { iv: fromB64(w.iv), data: toBuf(fromB64(w.data)) });
+  return crypto.subtle.importKey("pkcs8", bytes, { name: "ECDH", namedCurve: "P-256" }, true, [
+    "deriveKey",
+    "deriveBits",
+  ]);
+}
+
 // A small known token, encrypted at setup. On unlock we try to decrypt it;
 // success means the passphrase was correct. AES-GCM fails loudly on a wrong
 // key, so this never produces a false positive.

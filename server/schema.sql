@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS vaults (
   salt        TEXT NOT NULL,          -- JSON number[] — non-secret KDF salt
   verifier    TEXT NOT NULL,          -- JSON CipherBlob — checks the passphrase
   iterations  INTEGER NOT NULL,
+  identity_priv_wrapped TEXT,         -- identity private key, wrapped by the
+                                      -- vault key (opaque; for new-device recovery)
   created_at  INTEGER NOT NULL
 );
 
