@@ -2,7 +2,7 @@
 // The "narrative order" lens: named, ordered collections of pieces. You can
 // pull in thoughts you've captured, write new pieces in place (each becomes an
 // ordinary thought too), arrange the order, and read the whole as one draft.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { strandEntries, type Entry, type Strand, type Anchor } from "../lib/journal";
 import { EntryItem, MediaThumb } from "./EntryItem";
 
@@ -16,6 +16,7 @@ type Props = {
   onRemoveFrom: (strandId: string, entryId: string) => void;
   onReorder: (strandId: string, entryIds: string[]) => void;
   onWriteIn: (strandId: string, text: string) => void;
+  onAddPhoto: (strandId: string, file: File) => void;
   onSaveEntry: (id: string, text: string) => void;
   onDeleteEntry: (id: string) => void;
   onAnchor: (id: string, anchor: Anchor | null) => void;
@@ -100,6 +101,7 @@ function StrandDetail({
   onRemoveFrom,
   onReorder,
   onWriteIn,
+  onAddPhoto,
   onSaveEntry,
   onDeleteEntry,
   onAnchor,
@@ -112,6 +114,7 @@ function StrandDetail({
   const [titleDraft, setTitleDraft] = useState(strand.title);
   const [editingTitle, setEditingTitle] = useState(false);
   const [compose, setCompose] = useState("");
+  const photoRef = useRef<HTMLInputElement>(null);
 
   const ordered = strandEntries(strand.entryIds, byId);
 
@@ -252,6 +255,20 @@ function StrandDetail({
               <button className="save-btn" disabled={!compose.trim()} onClick={write}>
                 Add piece
               </button>
+              <button className="ghost-btn" onClick={() => photoRef.current?.click()}>
+                ＋ Photo
+              </button>
+              <input
+                ref={photoRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onAddPhoto(strand.id, f);
+                  e.target.value = "";
+                }}
+              />
             </div>
           </div>
 

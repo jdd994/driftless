@@ -605,6 +605,17 @@ export function useJournal() {
     [createEntry, addToStrand]
   );
 
+  // Drop a photo straight into a strand as its own piece: a captionless thought
+  // (empty text) carrying the image, appended to the strand.
+  const addPhotoToStrand = useCallback(
+    async (strandId: string, file: File) => {
+      const entry = await createEntry("");
+      await attachMedia(entry.id, file);
+      await addToStrand(strandId, entry.id);
+    },
+    [createEntry, attachMedia, addToStrand]
+  );
+
   // ---- Sync account (opt-in) --------------------------------------------
 
   // Create a sync account from THIS device's existing vault, then upload
@@ -704,6 +715,7 @@ export function useJournal() {
     removeFromStrand,
     reorderStrand,
     writeInStrand,
+    addPhotoToStrand,
     exportBackup,
     restoreBackup,
     account,

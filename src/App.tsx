@@ -331,6 +331,7 @@ export default function App() {
           onRemoveFrom={j.removeFromStrand}
           onReorder={j.reorderStrand}
           onWriteIn={j.writeInStrand}
+          onAddPhoto={j.addPhotoToStrand}
           onSaveEntry={j.updateEntry}
           onDeleteEntry={handleDelete}
           onAnchor={j.setAnchor}
