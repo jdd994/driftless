@@ -1,6 +1,7 @@
 # Media sync plan — encrypted photos across devices & shared strands
 
-Status: **design; build M1 (personal) first, then M2 (shared).** Photos are the
+Status: **M1 + M2 done & deployed (verified against live R2). M3 = housekeeping,
+deferred.** Photos are the
 last local-only piece. Text and a *reference* already sync; the image bytes stay
 on the device they were added on (hence "photo added from another device"). This
 adds an encrypted-blob road so photos travel — to your other devices, and into
@@ -59,16 +60,21 @@ client-side (max ~1600px, JPEG ~0.85) so they're typically < 1 MB.
 
 ## Phases (each shippable; test cross-device / with a 2nd person)
 
-1. **M1 — Personal media sync.** R2 bucket + `PUT/GET /media/:id`; upload dirty
-   media in the sync loop; download-on-demand in `getMediaUrl`. Fixes photos
-   across *your own* devices. No change to shared strands. **Build first.**
-2. **M2 — Shared strand photos.** Let a shared strand carry photos (it's text-only
-   today): a shared piece may include `mediaIds`, encrypted with the strand DEK;
-   `PUT/GET /shared/:id/media/:id` (membership-gated); the Shared view renders
-   polaroids inline. Delivers the family vision — weave in photos together.
-3. **M3 — housekeeping (later).** Delete-from-R2 on removal, orphaned-blob GC,
-   per-strand/quota limits, and DEK-rotation handling for shared media (re-upload
-   under the new epoch, like pieces).
+1. ✅ **M1 — Personal media sync.** R2 bucket + `PUT/GET /media/:id`; upload dirty
+   media in the sync loop; download-on-demand in `getMediaUrl`. Photos travel
+   across *your own* devices. **Done & deployed; verified 6/6** (round-trip, type
+   preserved, owner isolation, auth, 404s).
+2. ✅ **M2 — Shared strand photos.** A shared piece can carry `mediaIds`, encrypted
+   with the strand DEK; `PUT/GET /shared/:id/media/:mid` (membership-gated); the
+   Shared view renders polaroids inline, with an "＋ Photo" button. Family can
+   weave in photos together. **Done & deployed; verified 7/7** (member up/
+   download + decrypt, non-member 403, auth). *Known limit → M3:* removing a
+   member re-keys the strand but does **not** re-encrypt existing shared photos,
+   so photos added before a removal stop displaying afterward (text is preserved;
+   the photo just can't be decrypted under the new key). Rare in practice; fixed
+   in M3.
+3. **M3 — housekeeping (later).** Re-encrypt/re-upload shared media on DEK
+   rotation; delete-from-R2 on removal; orphaned-blob GC; per-strand/quota limits.
 
 ## Decisions / limits (v1)
 

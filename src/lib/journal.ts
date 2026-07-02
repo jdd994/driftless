@@ -249,7 +249,13 @@ export function decodeStrand(decrypted: string): { title: string; entryIds: stri
 // ---- Shared strands (co-authored, E2E) ----
 // A shared strand's pieces are their own text records encrypted with the strand
 // key. Kept simple for v1: text only (no anchors/media/reorder yet).
-export type SharedPiece = { id: string; text: string; createdAt: number; updatedAt: number };
+export type SharedPiece = {
+  id: string;
+  text: string;
+  mediaIds?: string[]; // photos, encrypted with the strand DEK (M2)
+  createdAt: number;
+  updatedAt: number;
+};
 export type SharedStrandView = {
   strandId: string;
   role: string; // 'owner' | 'member'

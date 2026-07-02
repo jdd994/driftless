@@ -420,6 +420,8 @@ export default function App() {
           onCreate={j.createSharedStrand}
           onInvite={j.inviteToSharedStrand}
           onWrite={j.writeInSharedStrand}
+          onAddPhoto={j.addPhotoToSharedStrand}
+          onMediaUrl={j.getSharedMediaUrl}
           onMembers={j.fetchStrandMembers}
           onRemoveMember={j.removeSharedMember}
           onLeave={j.leaveSharedStrand}

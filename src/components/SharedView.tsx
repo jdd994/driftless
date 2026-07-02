@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sharedPieces, type SharedStrandView } from "../lib/journal";
 import type { StrandMember } from "../lib/api";
+import { MediaThumb } from "./EntryItem";
 
 type Props = {
   sharedStrands: SharedStrandView[];
@@ -13,6 +14,8 @@ type Props = {
   onCreate: (title: string) => Promise<string | null>;
   onInvite: (strandId: string, email: string) => Promise<string | null>;
   onWrite: (strandId: string, text: string) => Promise<string | null>;
+  onAddPhoto: (strandId: string, file: File) => Promise<string | null>;
+  onMediaUrl: (strandId: string, mediaId: string) => Promise<string | null>;
   onMembers: (strandId: string) => Promise<StrandMember[]>;
   onRemoveMember: (strandId: string, userId: string) => Promise<string | null>;
   onLeave: (strandId: string) => Promise<string | null>;
@@ -73,6 +76,8 @@ export function SharedView(props: Props) {
         onBack={() => setSelectedId(null)}
         onInvite={props.onInvite}
         onWrite={props.onWrite}
+        onAddPhoto={props.onAddPhoto}
+        onMediaUrl={props.onMediaUrl}
         onCreateLink={props.onCreateLink}
         onMembers={props.onMembers}
         onRemoveMember={props.onRemoveMember}
@@ -141,6 +146,8 @@ function SharedDetail({
   onBack,
   onInvite,
   onWrite,
+  onAddPhoto,
+  onMediaUrl,
   onCreateLink,
   onMembers,
   onRemoveMember,
@@ -150,6 +157,8 @@ function SharedDetail({
   onBack: () => void;
   onInvite: (strandId: string, email: string) => Promise<string | null>;
   onWrite: (strandId: string, text: string) => Promise<string | null>;
+  onAddPhoto: (strandId: string, file: File) => Promise<string | null>;
+  onMediaUrl: (strandId: string, mediaId: string) => Promise<string | null>;
   onCreateLink: (strandId: string) => Promise<{ link: string } | { error: string }>;
   onMembers: (strandId: string) => Promise<StrandMember[]>;
   onRemoveMember: (strandId: string, userId: string) => Promise<string | null>;
@@ -160,6 +169,8 @@ function SharedDetail({
   const [linkErr, setLinkErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoRef = useRef<HTMLInputElement>(null);
 
   async function createLink() {
     setLinkBusy(true);
@@ -383,7 +394,18 @@ function SharedDetail({
         ) : (
           ordered.map((p) => (
             <div key={p.id} className="read-piece">
-              <p>{p.text}</p>
+              {p.text && <p>{p.text}</p>}
+              {p.mediaIds && p.mediaIds.length > 0 && (
+                <div className="media-grid">
+                  {p.mediaIds.map((mid) => (
+                    <MediaThumb
+                      key={mid}
+                      mediaId={mid}
+                      getUrl={(id) => onMediaUrl(strand.strandId, id)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           ))
         )}
@@ -406,6 +428,25 @@ function SharedDetail({
           <button className="save-btn" disabled={!compose.trim() || busy} onClick={write}>
             {busy ? "Adding…" : "Add piece"}
           </button>
+          <button className="ghost-btn" disabled={photoBusy} onClick={() => photoRef.current?.click()}>
+            {photoBusy ? "Adding photo…" : "＋ Photo"}
+          </button>
+          <input
+            ref={photoRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (!f) return;
+              setPhotoBusy(true);
+              setNote(null);
+              const err = await onAddPhoto(strand.strandId, f);
+              setPhotoBusy(false);
+              if (err) setNote(err);
+            }}
+          />
           {note && <span className="share-error">{note}</span>}
         </div>
       </div>

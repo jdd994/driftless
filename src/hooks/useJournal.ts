@@ -77,6 +77,8 @@ import {
   joinClaim,
   joinFinish,
   downloadMedia,
+  uploadSharedMedia,
+  downloadSharedMedia,
   type SharedRecord,
   type StrandMember,
 } from "../lib/api";
@@ -276,8 +278,8 @@ export function useJournal() {
               delete live.pieces[rec.id];
               continue;
             }
-            const { text } = decodePayload(await decryptString(live.dek, rec.content));
-            live.pieces[rec.id] = { id: rec.id, text, createdAt: rec.createdAt, updatedAt: rec.updatedAt };
+            const { text, mediaIds } = decodePayload(await decryptString(live.dek, rec.content));
+            live.pieces[rec.id] = { id: rec.id, text, mediaIds, createdAt: rec.createdAt, updatedAt: rec.updatedAt };
           }
         } catch {
           // undecryptable (e.g. a future DEK epoch) — skip rather than crash
@@ -999,6 +1001,62 @@ export function useJournal() {
     [publishShared]
   );
 
+  // Add a photo to a shared strand (M2): compress → encrypt with the strand DEK
+  // → upload to R2 (membership-gated) → append a photo piece. Like writeIn but
+  // carrying a captionless image, mirroring addPhotoToStrand for personal ones.
+  const addPhotoToSharedStrand = useCallback(
+    async (strandId: string, file: File): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return "This strand isn't ready yet.";
+      try {
+        const { bytes, type } = await compressImage(file);
+        const cb = await encryptBytes(live.dek, bytes);
+        const mediaId = uid();
+        await uploadSharedMedia(token, strandId, mediaId, cb.iv, cb.data, type);
+        const pieceId = uid();
+        const t = Date.now();
+        const entryIds = [...sharedPieces(live).map((p) => p.id), pieceId];
+        const pieceContent = await encryptString(live.dek, encodePayload("", undefined, [mediaId]));
+        const metaContent = await encryptString(live.dek, encodeStrand(live.title, entryIds));
+        await sharedPush(token, strandId, [
+          { kind: "piece", id: pieceId, createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: pieceContent },
+          { kind: "meta", id: "meta", createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: metaContent },
+        ] as SharedRecord[]);
+        live.entryIds = entryIds;
+        live.pieces[pieceId] = { id: pieceId, text: "", mediaIds: [mediaId], createdAt: t, updatedAt: t };
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't add that photo just now — try again.";
+      }
+    },
+    [publishShared]
+  );
+
+  // Decrypt + cache a shared photo (fetched from R2, decrypted with the strand
+  // DEK). In-memory only, like the rest of shared content.
+  const getSharedMediaUrl = useCallback(
+    async (strandId: string, mediaId: string): Promise<string | null> => {
+      const cached = mediaUrls.current.get(mediaId);
+      if (cached) return cached;
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return null;
+      try {
+        const dl = await downloadSharedMedia(token, strandId, mediaId);
+        if (!dl) return null;
+        const bytes = await decryptBytes(live.dek, { iv: dl.iv, data: dl.data });
+        const url = `data:${dl.type};base64,${bytesToBase64(bytes)}`;
+        mediaUrls.current.set(mediaId, url);
+        return url;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
   // Who's in a shared strand (name + role), for the members panel.
   const fetchStrandMembers = useCallback(async (strandId: string): Promise<StrandMember[]> => {
     const token = tokenRef.current;
@@ -1239,6 +1297,8 @@ export function useJournal() {
     leaveSharedStrand,
     createInviteLink,
     joinViaInvite,
+    addPhotoToSharedStrand,
+    getSharedMediaUrl,
     refreshShared: loadSharedStrands,
   };
 }

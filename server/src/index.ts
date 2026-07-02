@@ -97,6 +97,34 @@ app.get("/media/:id", requireAuth, async (c) => {
   });
 });
 
+// Shared-strand photos (M2): same as above but encrypted with the strand DEK
+// and gated by membership. Keyed s/<strandId>/<mediaId>.
+app.put("/shared/:id/media/:mid", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  const mid = c.req.param("mid")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength === 0) return c.json({ error: "empty upload" }, 400);
+  if (body.byteLength > MAX_MEDIA_BYTES) return c.json({ error: "image too large" }, 413);
+  const type = c.req.query("type") || "application/octet-stream";
+  await c.env.MEDIA.put(`s/${strandId}/${mid}`, body, { httpMetadata: { contentType: type } });
+  return c.json({ ok: true });
+});
+
+app.get("/shared/:id/media/:mid", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  const mid = c.req.param("mid")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  const obj = await c.env.MEDIA.get(`s/${strandId}/${mid}`);
+  if (!obj) return c.json({ error: "not found" }, 404);
+  return new Response(obj.body, {
+    headers: {
+      "content-type": obj.httpMetadata?.contentType || "application/octet-stream",
+      "cache-control": "private, max-age=31536000",
+    },
+  });
+});
+
 // A calm "note to the maker". Open (no account needed) so even a first-time
 // visitor can send a word. Stored separately from journal data; it's a plain
 // message, never touching any ciphertext. Optional token just attributes it.
