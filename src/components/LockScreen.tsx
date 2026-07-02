@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { parseBackup, type Backup } from "../lib/backup";
 import { Welcome } from "./Welcome";
+import { IosSetupNote } from "./IosSetupNote";
 
 type Props = {
   mode: "needs-setup" | "locked";
@@ -158,6 +159,7 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
           <div className="brand">
             Driftless<span className="dot">.</span>
           </div>
+          <IosSetupNote />
           <p className="lock-lead">
             One more, optional step: an account, so your journal can{" "}
             <b>sync across your devices</b> and you can <b>share strands</b> with
@@ -217,6 +219,7 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
         </div>
         {setup ? (
           <>
+            <IosSetupNote />
             <p className="lock-lead">
               Choose a passphrase — a few unrelated words are stronger and easier
               to remember than one short password. It encrypts everything you

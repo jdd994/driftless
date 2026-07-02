@@ -8,13 +8,13 @@
 // Dismissal is remembered so it never nags.
 import { useEffect, useState } from "react";
 
-function isStandalone(): boolean {
+export function isStandalone(): boolean {
   return (
     window.matchMedia?.("(display-mode: standalone)").matches ||
     (navigator as unknown as { standalone?: boolean }).standalone === true
   );
 }
-function isIOS(): boolean {
+export function isIOS(): boolean {
   return /iPad|iPhone|iPod/.test(navigator.userAgent);
 }
 
@@ -27,6 +27,7 @@ export function InstallHint() {
 
   useEffect(() => {
     if (isStandalone()) return; // already installed — nothing to do
+    if (isIOS()) return; // iOS is guided by IosSetupNote (order matters there)
     if (localStorage.getItem(DISMISS_KEY)) return;
     setShow(true);
     const onPrompt = (e: Event) => {

@@ -841,6 +841,19 @@ kbd {
 }
 .lock-restore:hover { color: var(--ink-soft); }
 
+/* ---------- iOS setup note ---------- */
+.ios-note {
+  background: rgba(219, 161, 74, 0.08);
+  border: 1px solid rgba(219, 161, 74, 0.32);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 18px;
+  text-align: left;
+}
+.ios-note-title { font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--amber); margin: 0 0 5px; }
+.ios-note-body { font-family: var(--sans); font-size: 12.5px; line-height: 1.55; color: var(--ink-soft); margin: 0; }
+.ios-note-body b { color: var(--ink); font-weight: 600; }
+
 /* ---------- install hint ---------- */
 .install-hint {
   background: var(--surface);

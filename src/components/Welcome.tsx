@@ -4,6 +4,7 @@
 // sent the link to) understands what this is, why it's private, and the one
 // honest trade: the passphrase has no reset. Presentational only.
 import { InstallHint } from "./InstallHint";
+import { IosSetupNote } from "./IosSetupNote";
 
 type Props = {
   onBegin: () => void;
@@ -58,6 +59,7 @@ export function Welcome({ onBegin }: Props) {
           pick a few words you'll remember, and keep them somewhere safe.
         </p>
 
+        <IosSetupNote />
         <InstallHint />
 
         <button className="save-btn lock-btn welcome-begin" onClick={onBegin}>
