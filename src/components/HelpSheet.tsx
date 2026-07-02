@@ -4,12 +4,12 @@
 import { useEffect, useRef, useState } from "react";
 import { sendFeedback } from "../lib/api";
 
-// Donation addresses shown in the Support section. Just copyable text + a link —
-// no processor, no widget, no tracker, no CSP change (privacy-safe).
+// Tip / support addresses shown in the Support section. Just copyable text + a
+// link — no processor, no widget, no tracker, no CSP change (privacy-safe).
 const SUPPORT = {
   btc: "bc1qvhzyyhjngwyc02p5ska0pk33tvn6dnq06vacgv", // device-verified on Trezor
   eth: "0x6857f91F7Fcd7B45a3ab3A51D2CdC47E23FE8c75",
-  fiatUrl: "https://ko-fi.com/johnny65449", // card/PayPal donations (outbound link)
+  fiatUrl: "https://ko-fi.com/johnny65449", // card/PayPal tips (outbound link)
 };
 
 function CopyRow({ label, value }: { label: string; value: string }) {
