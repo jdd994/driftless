@@ -24,7 +24,7 @@ const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 app.use("*", (c, next) =>
   cors({
     origin: c.env.ALLOWED_ORIGIN || "*",
-    allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     maxAge: 86400,
   })(c, next)
@@ -95,6 +95,12 @@ app.get("/media/:id", requireAuth, async (c) => {
       "cache-control": "private, max-age=31536000",
     },
   });
+});
+
+// Free the storage when a photo is removed (M3). Idempotent.
+app.delete("/media/:id", requireAuth, async (c) => {
+  await c.env.MEDIA.delete(`u/${c.get("userId")}/${c.req.param("id")!}`);
+  return c.json({ ok: true });
 });
 
 // Shared-strand photos (M2): same as above but encrypted with the strand DEK

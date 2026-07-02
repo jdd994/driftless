@@ -77,6 +77,7 @@ import {
   joinClaim,
   joinFinish,
   downloadMedia,
+  deleteMediaRemote,
   uploadSharedMedia,
   downloadSharedMedia,
   type SharedRecord,
@@ -655,6 +656,15 @@ export function useJournal() {
       if (updated) await guardedPersist(updated);
       await deleteMedia(mediaId);
       mediaUrls.current.delete(mediaId);
+      // Also free it from storage if we're connected (best-effort, idempotent).
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await deleteMediaRemote(token, mediaId);
+        } catch {
+          // offline / transient — the blob just lingers; harmless
+        }
+      }
     },
     [guardedPersist]
   );
@@ -1109,6 +1119,22 @@ export function useJournal() {
       const res = await sharedPush(token, live.strandId, changes.slice(i, i + 400));
       cursor = res.cursor;
     }
+    // Re-key shared photos too (M3): decrypt each with the old DEK and re-upload
+    // under the new one, so photos added before the removal keep displaying for
+    // the remaining members. Best-effort per photo.
+    const oldDek = live.dek;
+    const mediaIds = [...new Set(Object.values(live.pieces).flatMap((p) => p.mediaIds ?? []))];
+    for (const mid of mediaIds) {
+      try {
+        const dl = await downloadSharedMedia(token, live.strandId, mid);
+        if (!dl) continue;
+        const plain = await decryptBytes(oldDek, { iv: dl.iv, data: dl.data });
+        const cb = await encryptBytes(newDek, plain);
+        await uploadSharedMedia(token, live.strandId, mid, cb.iv, cb.data, dl.type);
+      } catch {
+        // skip any that fail; the rest still re-key
+      }
+    }
     // Re-wrap the new DEK to everyone still in the strand (including ourselves).
     const { members } = await sharedMembers(token, live.strandId);
     for (const m of members) {
@@ -1119,6 +1145,9 @@ export function useJournal() {
     live.dek = newDek;
     live.dekEpoch = newEpoch;
     live.cursor = cursor;
+    // Drop cached decrypted URLs for re-keyed photos so a later fetch uses the
+    // new key (the plaintext is identical, but keep the cache honest).
+    for (const mid of mediaIds) mediaUrls.current.delete(mid);
   }, []);
 
   // Owner removes a member, then re-keys so they can't read anything new.

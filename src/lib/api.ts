@@ -153,6 +153,15 @@ export async function downloadMedia(
   };
 }
 
+// Remove a personal photo blob from storage (M3). Best-effort, idempotent.
+export async function deleteMediaRemote(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/media/${id}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) throw new ApiError(`Media delete failed (${res.status})`, res.status);
+}
+
 // Shared-strand photos (M2): encrypted with the strand DEK, gated by membership.
 export async function uploadSharedMedia(
   token: string,

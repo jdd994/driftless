@@ -1,7 +1,9 @@
 # Media sync plan — encrypted photos across devices & shared strands
 
-Status: **M1 + M2 done & deployed (verified against live R2). M3 = housekeeping,
-deferred.** Photos are the
+Status: **M1 + M2 + M3 done & deployed (verified against live R2).** The media
+chapter is complete — photos travel across your devices and into shared strands,
+survive member removal (re-key), and free their storage when removed. Photos are
+the
 last local-only piece. Text and a *reference* already sync; the image bytes stay
 on the device they were added on (hence "photo added from another device"). This
 adds an encrypted-blob road so photos travel — to your other devices, and into
@@ -73,8 +75,13 @@ client-side (max ~1600px, JPEG ~0.85) so they're typically < 1 MB.
    so photos added before a removal stop displaying afterward (text is preserved;
    the photo just can't be decrypted under the new key). Rare in practice; fixed
    in M3.
-3. **M3 — housekeeping (later).** Re-encrypt/re-upload shared media on DEK
-   rotation; delete-from-R2 on removal; orphaned-blob GC; per-strand/quota limits.
+3. ✅ **M3 — housekeeping.** DEK rotation now re-encrypts + re-uploads shared
+   photos under the new key (so a removal no longer breaks earlier photos), and
+   removing a personal photo frees its blob from R2 (`DELETE /media/:id`,
+   idempotent; CORS allows DELETE). **Done & deployed; verified 6/6** (overwrite/
+   re-key, delete→404, idempotent delete, auth, CORS). *Still open (genuinely
+   optional, low priority):* background GC of any orphaned blobs, deleting shared
+   photos from R2 (no shared-piece delete UI yet), and per-user storage quotas.
 
 ## Decisions / limits (v1)
 
