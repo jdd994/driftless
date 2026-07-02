@@ -153,6 +153,36 @@ export async function putStoredStrand(strand: StoredStrand): Promise<void> {
   await (await db()).put("strands", strand);
 }
 
+export async function getStoredEntry(id: string): Promise<StoredEntry | undefined> {
+  return (await db()).get("entries", id);
+}
+
+export async function getStoredStrand(id: string): Promise<StoredStrand | undefined> {
+  return (await db()).get("strands", id);
+}
+
+// Records needing upload (includes dirty tombstones).
+export async function dirtyEntries(): Promise<StoredEntry[]> {
+  return (await allStoredEntries()).filter((e) => e.dirty);
+}
+export async function dirtyStrands(): Promise<StoredStrand[]> {
+  return (await allStoredStrands()).filter((s) => s.dirty);
+}
+
+// Clear the dirty flag after a successful push — but only if the record hasn't
+// changed since we pushed it (updatedAt still matches), so we never drop an edit
+// made mid-sync.
+export async function clearEntryDirty(id: string, updatedAt: number): Promise<void> {
+  const d = await db();
+  const e = await d.get("entries", id);
+  if (e && e.dirty && e.updatedAt === updatedAt) await d.put("entries", { ...e, dirty: false });
+}
+export async function clearStrandDirty(id: string, updatedAt: number): Promise<void> {
+  const d = await db();
+  const s = await d.get("strands", id);
+  if (s && s.dirty && s.updatedAt === updatedAt) await d.put("strands", { ...s, dirty: false });
+}
+
 export async function getDevice(): Promise<DeviceEnrollment | undefined> {
   return (await db()).get("device", "device");
 }

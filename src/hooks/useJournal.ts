@@ -30,10 +30,14 @@ import {
   getDevice,
   saveDevice,
   clearDevice,
+  getSyncState,
+  saveSyncState,
   type StoredEntry,
   type StoredStrand,
   type VaultMeta,
 } from "../lib/db";
+import { register, login, fetchVault } from "../lib/api";
+import { syncNow } from "../lib/sync";
 import {
   uid,
   encodePayload,
@@ -57,13 +61,23 @@ export function useJournal() {
   const [saveError, setSaveError] = useState<SaveError>(null);
   const [bioSupported, setBioSupported] = useState(false);
   const [bioEnrolled, setBioEnrolled] = useState(false);
+  const [account, setAccount] = useState<string | null>(null); // synced account email, or null
   const keyRef = useRef<CryptoKey | null>(null);
+  const tokenRef = useRef<string | null>(null); // sync auth token (NOT the key)
+  const syncingRef = useRef(false);
+  const syncTimer = useRef<number | null>(null);
 
   // Decide on first paint whether we need setup or unlock.
   useEffect(() => {
     getVault().then((v) => setVaultState(v ? "locked" : "needs-setup"));
     biometricSupported().then(setBioSupported);
     getDevice().then((d) => setBioEnrolled(!!d));
+    getSyncState().then((s) => {
+      if (s?.token) {
+        tokenRef.current = s.token;
+        setAccount(s.accountEmail ?? "account");
+      }
+    });
   }, []);
 
   // Ask the browser to make this origin's storage persistent so the journal
@@ -111,6 +125,51 @@ export function useJournal() {
     out.sort((a, b) => b.updatedAt - a.updatedAt);
     setStrands(out);
   }, []);
+
+  // Reconcile with the server (pull others' changes, push ours), then refresh
+  // the decrypted view if anything arrived. Runs only while unlocked (needs the
+  // key to re-decrypt) and never overlaps itself. No-op when not signed in.
+  const runSync = useCallback(async () => {
+    const token = tokenRef.current;
+    const key = keyRef.current;
+    if (!token || !key || syncingRef.current) return;
+    syncingRef.current = true;
+    try {
+      const changed = await syncNow(token);
+      if (changed) {
+        await loadEntries(key);
+        await loadStrands(key);
+      }
+    } catch {
+      // offline / transient — a later trigger will retry
+    } finally {
+      syncingRef.current = false;
+    }
+  }, [loadEntries, loadStrands]);
+
+  // Debounced: after you stop editing, push (and pull) shortly after.
+  const scheduleSync = useCallback(() => {
+    if (!tokenRef.current) return;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = window.setTimeout(() => void runSync(), 1500);
+  }, [runSync]);
+
+  // Background sync while open: on unlock, on reconnect, on returning to the
+  // app, and on a gentle interval.
+  useEffect(() => {
+    if (vaultState !== "open" || !tokenRef.current) return;
+    void runSync();
+    const onOnline = () => void runSync();
+    const onVis = () => document.visibilityState === "visible" && runSync();
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVis);
+    const id = window.setInterval(() => void runSync(), 60_000);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVis);
+      clearInterval(id);
+    };
+  }, [vaultState, runSync]);
 
   // First run: choose a passphrase, create the vault.
   const createVault = useCallback(
@@ -228,6 +287,7 @@ export function useJournal() {
       try {
         await persist(entry, deleted);
         setSaveError(null);
+        scheduleSync();
       } catch {
         setSaveError({
           message: deleted
@@ -237,7 +297,7 @@ export function useJournal() {
         });
       }
     },
-    [persist]
+    [persist, scheduleSync]
   );
 
   const createEntry = useCallback(
@@ -378,6 +438,7 @@ export function useJournal() {
       try {
         await persistStrand(strand, deleted);
         setSaveError(null);
+        scheduleSync();
       } catch {
         setSaveError({
           message: "Couldn't save that strand to this device.",
@@ -385,7 +446,7 @@ export function useJournal() {
         });
       }
     },
-    [persistStrand]
+    [persistStrand, scheduleSync]
   );
 
   // Apply a change to one strand (bumping updatedAt) and persist it.
@@ -458,6 +519,73 @@ export function useJournal() {
     [createEntry, addToStrand]
   );
 
+  // ---- Sync account (opt-in) --------------------------------------------
+
+  // Create a sync account from THIS device's existing vault, then upload
+  // everything. Requires being unlocked. Returns an error message, or null on
+  // success. (Identity keypair is deferred to the sharing chapter — the server
+  // column is ready; we send an empty public key for now.)
+  const connectCreateAccount = useCallback(
+    async (email: string, password: string): Promise<string | null> => {
+      const v = await getVault();
+      if (!v || !keyRef.current) return "Unlock your journal first.";
+      const em = email.trim().toLowerCase();
+      try {
+        const { token } = await register(
+          em,
+          password,
+          { salt: v.salt, verifier: v.verifier, iterations: v.iterations },
+          ""
+        );
+        tokenRef.current = token;
+        await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
+        setAccount(em);
+        await runSync(); // uploads all existing (dirty) entries + strands
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't create the account.";
+      }
+    },
+    [runSync]
+  );
+
+  // Sign in on a NEW device to join an existing account: fetch the vault, save
+  // it, then drop to the unlock screen so the passphrase re-derives the key and
+  // pulls everything. Only for a fresh device (no local vault yet).
+  const connectSignIn = useCallback(
+    async (email: string, password: string): Promise<string | null> => {
+      if (await getVault())
+        return "This device already has a journal — sign-in is for a new device.";
+      const em = email.trim().toLowerCase();
+      try {
+        const { token } = await login(em, password);
+        const meta = await fetchVault(token);
+        await saveVault({
+          id: "vault",
+          salt: meta.salt,
+          verifier: meta.verifier,
+          iterations: meta.iterations,
+          createdAt: Date.now(),
+        });
+        tokenRef.current = token;
+        await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
+        setAccount(em);
+        setVaultState("locked"); // unlock with the passphrase → pulls the journal
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't sign in.";
+      }
+    },
+    []
+  );
+
+  // Stop syncing on this device. Local data stays; the account is untouched.
+  const disconnectAccount = useCallback(async () => {
+    tokenRef.current = null;
+    setAccount(null);
+    await saveSyncState({ id: "state", cursor: 0 });
+  }, []);
+
   const clearSaveError = useCallback(() => setSaveError(null), []);
 
   return {
@@ -488,5 +616,10 @@ export function useJournal() {
     writeInStrand,
     exportBackup,
     restoreBackup,
+    account,
+    connectCreateAccount,
+    connectSignIn,
+    disconnectAccount,
+    syncNow: runSync,
   };
 }
