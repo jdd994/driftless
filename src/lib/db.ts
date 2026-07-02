@@ -207,6 +207,7 @@ export async function markAllDirty(): Promise<void> {
   const d = await db();
   for (const e of await d.getAll("entries")) if (!e.dirty) await d.put("entries", { ...e, dirty: true });
   for (const s of await d.getAll("strands")) if (!s.dirty) await d.put("strands", { ...s, dirty: true });
+  for (const m of await d.getAll("media")) if (!m.dirty && !m.deleted) await d.put("media", { ...m, dirty: true });
 }
 
 export async function putMedia(media: StoredMedia): Promise<void> {
@@ -217,6 +218,16 @@ export async function getMedia(id: string): Promise<StoredMedia | undefined> {
 }
 export async function deleteMedia(id: string): Promise<void> {
   await (await db()).delete("media", id);
+}
+
+// Media needing upload to R2 (the encrypted image bytes). See MEDIA_PLAN.md.
+export async function dirtyMedia(): Promise<StoredMedia[]> {
+  return (await (await db()).getAll("media")).filter((m) => m.dirty && !m.deleted);
+}
+export async function clearMediaDirty(id: string): Promise<void> {
+  const d = await db();
+  const m = await d.get("media", id);
+  if (m && m.dirty) await d.put("media", { ...m, dirty: false });
 }
 
 export async function getDevice(): Promise<DeviceEnrollment | undefined> {

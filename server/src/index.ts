@@ -9,9 +9,12 @@ import { hashPassword, verifyPassword, signToken, verifyToken } from "./auth";
 
 type Env = {
   DB: D1Database;
+  MEDIA: R2Bucket;
   TOKEN_SECRET: string;
   ALLOWED_ORIGIN: string;
 };
+
+const MAX_MEDIA_BYTES = 8 * 1024 * 1024; // 8 MB — images are compressed client-side
 
 type Vars = { userId: string };
 type AppContext = Context<{ Bindings: Env; Variables: Vars }>;
@@ -21,7 +24,7 @@ const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 app.use("*", (c, next) =>
   cors({
     origin: c.env.ALLOWED_ORIGIN || "*",
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     maxAge: 86400,
   })(c, next)
@@ -66,6 +69,33 @@ async function withinRateLimit(
 const TOO_MANY = "Too many attempts from here — please wait a little and try again.";
 
 app.get("/health", (c) => c.json({ ok: true, service: "driftless-server" }));
+
+// ---- Media (M1: personal photos) -----------------------------------------
+// R2 stores an opaque blob: iv||ciphertext, already encrypted on the device
+// with the vault key. Keyed by owner; only the owner can read it back. Type is
+// non-secret metadata so the client can render it. See MEDIA_PLAN.md.
+
+app.put("/media/:id", requireAuth, async (c) => {
+  const id = c.req.param("id")!;
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength === 0) return c.json({ error: "empty upload" }, 400);
+  if (body.byteLength > MAX_MEDIA_BYTES) return c.json({ error: "image too large" }, 413);
+  const type = c.req.query("type") || "application/octet-stream";
+  await c.env.MEDIA.put(`u/${c.get("userId")}/${id}`, body, { httpMetadata: { contentType: type } });
+  return c.json({ ok: true });
+});
+
+app.get("/media/:id", requireAuth, async (c) => {
+  const id = c.req.param("id")!;
+  const obj = await c.env.MEDIA.get(`u/${c.get("userId")}/${id}`);
+  if (!obj) return c.json({ error: "not found" }, 404);
+  return new Response(obj.body, {
+    headers: {
+      "content-type": obj.httpMetadata?.contentType || "application/octet-stream",
+      "cache-control": "private, max-age=31536000",
+    },
+  });
+});
 
 // A calm "note to the maker". Open (no account needed) so even a first-time
 // visitor can send a word. Stored separately from journal data; it's a plain

@@ -3,12 +3,14 @@
 // it never needs the passphrase or key (that's the point of the design in
 // SYNC_PLAN.md). Pull applies remote records with last-write-wins by updatedAt;
 // push uploads dirty records. Strands and entries flow through one path.
-import { pushChanges, pullChanges, type SyncRecord } from "./api";
+import { pushChanges, pullChanges, uploadMedia, type SyncRecord } from "./api";
 import {
   dirtyEntries,
   dirtyStrands,
+  dirtyMedia,
   clearEntryDirty,
   clearStrandDirty,
+  clearMediaDirty,
   getStoredEntry,
   getStoredStrand,
   putStoredEntry,
@@ -97,10 +99,25 @@ export async function push(token: string): Promise<void> {
   for (const s of strands) await clearStrandDirty(s.id, s.updatedAt);
 }
 
+// Upload dirty photo blobs (already encrypted) to R2, clearing each flag on
+// success. Best-effort per item — one failure leaves that photo dirty to retry
+// and never blocks the rest.
+export async function pushMedia(token: string): Promise<void> {
+  for (const m of await dirtyMedia()) {
+    try {
+      await uploadMedia(token, m.id, m.iv, m.data, m.type);
+      await clearMediaDirty(m.id);
+    } catch {
+      // leave dirty; a later sync retries
+    }
+  }
+}
+
 // Full sync. Pull first (get others' changes), then push local dirty. Returns
 // true if the pull changed local data (caller should re-decrypt the view).
 export async function syncNow(token: string): Promise<boolean> {
   const changed = await pull(token);
   await push(token);
+  await pushMedia(token);
   return changed;
 }

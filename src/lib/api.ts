@@ -116,6 +116,43 @@ export function pullChanges(
   return req(`/sync/pull?since=${since}`, { token });
 }
 
+// ---- media (M1: encrypted photo blobs over R2) ----
+// Binary, not JSON. The object is iv(12) || ciphertext — already encrypted on
+// the device; the server just stores/returns it. Type is non-secret metadata.
+
+export async function uploadMedia(
+  token: string,
+  id: string,
+  iv: Uint8Array,
+  data: ArrayBuffer,
+  type: string
+): Promise<void> {
+  const body = new Uint8Array(iv.byteLength + data.byteLength);
+  body.set(iv, 0);
+  body.set(new Uint8Array(data), iv.byteLength);
+  const res = await fetch(`${API_BASE}/media/${id}?type=${encodeURIComponent(type)}`, {
+    method: "PUT",
+    headers: { authorization: `Bearer ${token}` },
+    body,
+  });
+  if (!res.ok) throw new ApiError(`Media upload failed (${res.status})`, res.status);
+}
+
+export async function downloadMedia(
+  token: string,
+  id: string
+): Promise<{ iv: Uint8Array; data: ArrayBuffer; type: string } | null> {
+  const res = await fetch(`${API_BASE}/media/${id}`, { headers: { authorization: `Bearer ${token}` } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApiError(`Media download failed (${res.status})`, res.status);
+  const all = new Uint8Array(await res.arrayBuffer());
+  return {
+    iv: all.slice(0, 12),
+    data: all.slice(12).buffer,
+    type: res.headers.get("content-type") || "application/octet-stream",
+  };
+}
+
 // ---- feedback (a calm note to the maker) ----
 
 // Open endpoint — no account needed. Token is sent if present, only so a note

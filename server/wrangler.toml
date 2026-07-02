@@ -8,6 +8,11 @@ binding = "DB"
 database_name = "driftless"
 database_id = "93a4c55b-ce71-47fe-b86e-18402aa3913c"
 
+# Encrypted photo blobs (opaque ciphertext). See MEDIA_PLAN.md.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "driftless-media"
+
 [vars]
 # The Pages origin allowed to call this API (CORS). Add a custom domain here too
 # when you have one. TOKEN_SECRET is a *secret*, set separately:

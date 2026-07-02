@@ -76,6 +76,7 @@ import {
   createInviteLink as apiCreateInviteLink,
   joinClaim,
   joinFinish,
+  downloadMedia,
   type SharedRecord,
   type StrandMember,
 } from "../lib/api";
@@ -682,8 +683,22 @@ export function useJournal() {
     if (cached) return cached;
     const key = keyRef.current;
     if (!key) return null;
-    const m = await getMedia(id);
-    if (!m || m.deleted) return null;
+    let m = await getMedia(id);
+    if (m?.deleted) return null;
+    // Not on this device (e.g. added on another) — pull the encrypted blob from
+    // R2 if we're connected, then cache it locally so it's here next time.
+    if (!m) {
+      const token = tokenRef.current;
+      if (!token) return null;
+      try {
+        const dl = await downloadMedia(token, id);
+        if (!dl) return null;
+        m = { id, type: dl.type, createdAt: Date.now(), iv: dl.iv, data: dl.data, deleted: false, dirty: false };
+        await putMedia(m);
+      } catch {
+        return null;
+      }
+    }
     try {
       const bytes = await decryptBytes(key, { iv: m.iv, data: m.data });
       // data: URL (not blob:) so it displays under the existing CSP, regardless
