@@ -183,6 +183,14 @@ export async function clearStrandDirty(id: string, updatedAt: number): Promise<v
   if (s && s.dirty && s.updatedAt === updatedAt) await d.put("strands", { ...s, dirty: false });
 }
 
+// Mark every local record dirty — used when connecting a NEW account, so the
+// whole journal uploads even if it was previously synced to a different one.
+export async function markAllDirty(): Promise<void> {
+  const d = await db();
+  for (const e of await d.getAll("entries")) if (!e.dirty) await d.put("entries", { ...e, dirty: true });
+  for (const s of await d.getAll("strands")) if (!s.dirty) await d.put("strands", { ...s, dirty: true });
+}
+
 export async function getDevice(): Promise<DeviceEnrollment | undefined> {
   return (await db()).get("device", "device");
 }

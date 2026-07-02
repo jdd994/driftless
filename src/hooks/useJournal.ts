@@ -32,6 +32,7 @@ import {
   clearDevice,
   getSyncState,
   saveSyncState,
+  markAllDirty,
   type StoredEntry,
   type StoredStrand,
   type VaultMeta,
@@ -540,7 +541,8 @@ export function useJournal() {
         tokenRef.current = token;
         await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
         setAccount(em);
-        await runSync(); // uploads all existing (dirty) entries + strands
+        await markAllDirty(); // a fresh account gets the WHOLE journal, not just recent edits
+        await runSync();
         return null;
       } catch (e) {
         return e instanceof Error ? e.message : "Couldn't create the account.";
