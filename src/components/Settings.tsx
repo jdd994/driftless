@@ -2,7 +2,7 @@
 // "Set the mood" — a calm sheet to pick a warm theme and toggle night-dimming.
 // Same modal shape as HelpSheet. Preview swatches carry their own colors so you
 // see each mood even while a different one is active.
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Mood } from "../hooks/useSettings";
 
 type MoodInfo = { id: Mood; name: string; desc: string; bg: string; ink: string; amber: string };
@@ -20,9 +20,120 @@ type Props = {
   onMood: (m: Mood) => void;
   nightDim: boolean;
   onNightDim: (on: boolean) => void;
+  account: string | null;
+  onCreateAccount: (email: string, password: string) => Promise<string | null>;
+  onDisconnect: () => void;
+  onSyncNow: () => void;
 };
 
-export function Settings({ onClose, mood, onMood, nightDim, onNightDim }: Props) {
+function AccountSection({
+  account,
+  onCreateAccount,
+  onDisconnect,
+  onSyncNow,
+}: Pick<Props, "account" | "onCreateAccount" | "onDisconnect" | "onSyncNow">) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setError(null);
+    if (!email.trim() || password.length < 8) {
+      setError("Enter an email and an account password of at least 8 characters.");
+      return;
+    }
+    setBusy(true);
+    const err = await onCreateAccount(email, password);
+    setBusy(false);
+    if (err) setError(err);
+    else {
+      setOpen(false);
+      setEmail("");
+      setPassword("");
+    }
+  }
+
+  if (account) {
+    return (
+      <section>
+        <h3>Sync</h3>
+        <p className="account-status">
+          Syncing as <b>{account}</b>. Your journal follows you to any device you sign in on.
+        </p>
+        <div className="edit-foot">
+          <button className="ghost-btn" onClick={onSyncNow}>
+            Sync now
+          </button>
+          <button className="ghost-btn" onClick={onDisconnect}>
+            Disconnect this device
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <h3>Sync across devices</h3>
+      <p className="account-blurb">
+        Create an account to carry your journal to your other devices. The account is only a
+        login — separate from your passphrase, which never leaves your device. We still can't
+        read a word.
+      </p>
+      {!open ? (
+        <button className="ghost-btn" onClick={() => setOpen(true)}>
+          Create an account
+        </button>
+      ) : (
+        <div className="account-form">
+          <input
+            className="anchor-input"
+            type="email"
+            placeholder="Email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            className="anchor-input"
+            type="password"
+            placeholder="Account password (not your passphrase)"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && create()}
+          />
+          {error && <p className="lock-error">{error}</p>}
+          <div className="edit-foot">
+            <button className="save-btn" disabled={busy} onClick={create}>
+              {busy ? "Working…" : "Create account"}
+            </button>
+            <button className="ghost-btn" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      <p className="account-hint">
+        Already have an account? Sign in on a <i>new</i> device from its welcome screen.
+      </p>
+    </section>
+  );
+}
+
+export function Settings({
+  onClose,
+  mood,
+  onMood,
+  nightDim,
+  onNightDim,
+  account,
+  onCreateAccount,
+  onDisconnect,
+  onSyncNow,
+}: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -84,6 +195,13 @@ export function Settings({ onClose, mood, onMood, nightDim, onNightDim }: Props)
               </span>
             </button>
           </section>
+
+          <AccountSection
+            account={account}
+            onCreateAccount={onCreateAccount}
+            onDisconnect={onDisconnect}
+            onSyncNow={onSyncNow}
+          />
         </div>
       </div>
     </div>

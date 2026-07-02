@@ -9,14 +9,32 @@ type Props = {
   onUnlock: (passphrase: string) => Promise<boolean>;
   onBiometric: () => Promise<boolean>;
   onRestore: (backup: Backup) => Promise<void>;
+  onSignIn: (email: string, password: string) => Promise<string | null>;
 };
 
-export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, onRestore }: Props) {
+export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, onRestore, onSignIn }: Props) {
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [siEmail, setSiEmail] = useState("");
+  const [siPass, setSiPass] = useState("");
+
+  async function signIn() {
+    setError(null);
+    if (!siEmail.trim() || !siPass) {
+      setError("Enter your account email and password.");
+      return;
+    }
+    setBusy(true);
+    const err = await onSignIn(siEmail, siPass);
+    setBusy(false);
+    // On success the vault is written and mode flips to "locked" (unlock with
+    // your passphrase). On failure, show why.
+    if (err) setError(err);
+  }
 
   const setup = mode === "needs-setup";
 
@@ -167,6 +185,44 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
             >
               Have a backup? Restore it
             </button>
+
+            {!signingIn ? (
+              <button
+                className="lock-restore"
+                onClick={() => {
+                  setSigningIn(true);
+                  setError(null);
+                }}
+              >
+                Joining from another device? Sign in
+              </button>
+            ) : (
+              <div className="signin-form">
+                <input
+                  className="lock-input"
+                  type="email"
+                  placeholder="Account email"
+                  autoComplete="email"
+                  value={siEmail}
+                  onChange={(e) => setSiEmail(e.target.value)}
+                />
+                <input
+                  className="lock-input"
+                  type="password"
+                  placeholder="Account password"
+                  autoComplete="current-password"
+                  value={siPass}
+                  onChange={(e) => setSiPass(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && signIn()}
+                />
+                <button className="save-btn lock-btn" disabled={busy} onClick={signIn}>
+                  {busy ? "Working…" : "Sign in & sync"}
+                </button>
+                <button className="lock-restore" onClick={() => setSigningIn(false)}>
+                  Cancel
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

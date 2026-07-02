@@ -644,6 +644,19 @@ kbd {
 .support-fiat { display: inline-block; margin-top: 12px; font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--amber); text-decoration: none; }
 .support-fiat:hover { text-decoration: underline; }
 
+/* ---------- account / sync ---------- */
+.account-blurb, .account-status, .account-hint {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  margin: 0 0 10px;
+}
+.account-hint { font-size: 12px; color: var(--ink-faint); margin: 10px 0 0; }
+.account-form { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.account-form .anchor-input { border-color: var(--line); }
+.signin-form { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
 /* ---------- lock screen ---------- */
 .lock {
   min-height: 100vh;

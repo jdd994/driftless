@@ -117,6 +117,7 @@ export default function App() {
         onUnlock={j.unlock}
         onBiometric={j.biometricUnlock}
         onRestore={j.restoreBackup}
+        onSignIn={j.connectSignIn}
       />
     );
   }
@@ -340,6 +341,10 @@ export default function App() {
           onMood={settings.setMood}
           nightDim={settings.nightDim}
           onNightDim={settings.setNightDim}
+          account={j.account}
+          onCreateAccount={j.connectCreateAccount}
+          onDisconnect={j.disconnectAccount}
+          onSyncNow={j.syncNow}
         />
       )}
       <div className="night-veil" style={{ opacity: veil }} aria-hidden="true" />
