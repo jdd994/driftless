@@ -7,13 +7,8 @@
 # attempt to exfiltrate a passphrase/entry to another origin, is blocked by the
 # browser. When sync is added, add the API origin to connect-src (and nothing
 # else).
-#
-# 'wasm-unsafe-eval' is required to run the on-device HEIC→JPEG converter
-# (iPhone photos) via WebAssembly. It permits *only* WebAssembly compilation —
-# NOT string eval()/new Function() — so it's a narrow relaxation, not the broad
-# 'unsafe-eval'. blob: in worker-src covers the converter spawning a worker.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://driftless-server.jdd994.workers.dev; manifest-src 'self'; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://driftless-server.jdd994.workers.dev; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

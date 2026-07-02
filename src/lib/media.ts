@@ -22,19 +22,23 @@ function isHeic(file: File): boolean {
   return /(heic|heif)/i.test(file.type) || /\.(heic|heif)$/i.test(file.name);
 }
 
-// Downscale + re-encode a photo to JPEG. iPhone HEIC/HEIF can't be decoded by
-// most browsers' canvas, so we convert those first (heic2any, lazily loaded so
-// it doesn't weigh down startup). Throws on any failure rather than storing an
-// unviewable blob — the caller surfaces a clear message instead of a white
-// polaroid.
+// Downscale + re-encode a photo to JPEG. Throws (never stores an unviewable
+// blob) so the caller can show a clear message instead of a white polaroid.
+// iPhone photos: adding from the phone works because iOS hands the browser a
+// JPEG (or WebKit decodes the HEIC natively). A raw .heic added from a desktop
+// browser can't be decoded there — we say so plainly rather than hang.
 export async function compressImage(file: File): Promise<{ bytes: ArrayBuffer; type: string }> {
-  let source: Blob = file;
-  if (isHeic(file)) {
-    const heic2any = (await import("heic2any")).default;
-    const out = await heic2any({ blob: file, toType: "image/jpeg", quality: QUALITY });
-    source = Array.isArray(out) ? out[0] : out;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    if (isHeic(file)) {
+      throw new Error(
+        "iPhone photos (HEIC) can't be added from a computer here — add it from your phone (it converts automatically), or save it as JPEG first."
+      );
+    }
+    throw new Error("Couldn't read that image — try a JPEG or PNG.");
   }
-  const bitmap = await createImageBitmap(source);
   const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * scale));
   const h = Math.max(1, Math.round(bitmap.height * scale));
