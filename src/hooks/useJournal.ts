@@ -19,6 +19,9 @@ import {
   importPublicKeyB64,
   wrapPrivateKey,
   unwrapPrivateKey,
+  generateDEK,
+  wrapDEKForRecipient,
+  unwrapDEK,
   PBKDF2_ITERATIONS,
 } from "../lib/crypto";
 import { compressImage, bytesToBase64 } from "../lib/media";
@@ -48,7 +51,19 @@ import {
   type StoredStrand,
   type VaultMeta,
 } from "../lib/db";
-import { register, login, fetchVault, setIdentity } from "../lib/api";
+import {
+  register,
+  login,
+  fetchVault,
+  setIdentity,
+  fetchKeys,
+  createShared,
+  inviteToStrand,
+  sharedMine,
+  sharedPush,
+  sharedPull,
+  type SharedRecord,
+} from "../lib/api";
 import { syncNow } from "../lib/sync";
 import {
   uid,
@@ -60,12 +75,29 @@ import {
   type Anchor,
   type Strand,
   type MediaConfig,
+  type SharedStrandView,
+  type SharedPiece,
 } from "../lib/journal";
 import { buildBackup, type Backup } from "../lib/backup";
 
 export type SaveError = { message: string; retry: () => void } | null;
 
 export type VaultState = "loading" | "needs-setup" | "locked" | "open";
+
+// A shared strand held live in memory: the unwrapped strand key (DEK), the
+// pull cursor, and the decrypted title/order/pieces. Never persisted — shared
+// content lives on the server (opaque) and is re-fetched + decrypted per session.
+type LiveShared = {
+  strandId: string;
+  ownerId: string;
+  role: string;
+  dek: CryptoKey;
+  dekEpoch: number;
+  cursor: number;
+  title: string;
+  entryIds: string[];
+  pieces: Record<string, SharedPiece>;
+};
 
 export function useJournal() {
   const [vaultState, setVaultState] = useState<VaultState>("loading");
@@ -75,12 +107,14 @@ export function useJournal() {
   const [bioSupported, setBioSupported] = useState(false);
   const [bioEnrolled, setBioEnrolled] = useState(false);
   const [account, setAccount] = useState<string | null>(null); // synced account email, or null
+  const [sharedStrands, setSharedStrands] = useState<SharedStrandView[]>([]);
   const keyRef = useRef<CryptoKey | null>(null);
   const tokenRef = useRef<string | null>(null); // sync auth token (NOT the key)
   const syncingRef = useRef(false);
   const syncTimer = useRef<number | null>(null);
   const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → object URL (decrypted, in-memory)
   const identityRef = useRef<CryptoKeyPair | null>(null); // ECDH keypair for sharing (in-memory)
+  const sharedRef = useRef<Map<string, LiveShared>>(new Map()); // shared strands live (with unwrapped DEKs)
 
   // Decide on first paint whether we need setup or unlock.
   useEffect(() => {
@@ -194,23 +228,123 @@ export function useJournal() {
     }
   }, []);
 
+  // Publish the live shared strands (a snapshot the UI can render).
+  const publishShared = useCallback(() => {
+    const views: SharedStrandView[] = [...sharedRef.current.values()].map((v) => ({
+      strandId: v.strandId,
+      role: v.role,
+      title: v.title,
+      entryIds: v.entryIds,
+      pieces: v.pieces,
+    }));
+    setSharedStrands(views);
+  }, []);
+
+  // Pull new shared objects for one strand from its cursor forward and fold them
+  // into the live copy (decrypting with the strand DEK; LWW by seq order).
+  const pullSharedStrand = useCallback(async (live: LiveShared) => {
+    const token = tokenRef.current;
+    if (!token) return;
+    for (;;) {
+      const res = await sharedPull(token, live.strandId, live.cursor);
+      for (const rec of res.changes) {
+        try {
+          if (rec.kind === "meta") {
+            if (rec.deleted) continue;
+            const { title, entryIds } = decodeStrand(await decryptString(live.dek, rec.content));
+            live.title = title;
+            live.entryIds = entryIds;
+          } else if (rec.kind === "piece") {
+            if (rec.deleted) {
+              delete live.pieces[rec.id];
+              continue;
+            }
+            const { text } = decodePayload(await decryptString(live.dek, rec.content));
+            live.pieces[rec.id] = { id: rec.id, text, createdAt: rec.createdAt, updatedAt: rec.updatedAt };
+          }
+        } catch {
+          // undecryptable (e.g. a future DEK epoch) — skip rather than crash
+        }
+      }
+      live.cursor = res.cursor;
+      if (!res.more) break;
+    }
+  }, []);
+
+  // Fetch the strands I'm a member of, unwrap each DEK (once), pull + decrypt
+  // their pieces, and publish. Safe to call repeatedly (incremental per cursor).
+  const loadSharedStrands = useCallback(async () => {
+    const token = tokenRef.current;
+    if (!token) return;
+    await ensureIdentity();
+    const kp = identityRef.current;
+    if (!kp) return;
+    try {
+      const { strands } = await sharedMine(token);
+      for (const s of strands) {
+        let live = sharedRef.current.get(s.strandId);
+        if (!live) {
+          let dek: CryptoKey;
+          try {
+            dek = await unwrapDEK(kp.privateKey, s.ephemeralPub, s.wrappedDEK);
+          } catch {
+            continue; // can't unwrap our copy — skip this strand
+          }
+          live = {
+            strandId: s.strandId,
+            ownerId: s.ownerId,
+            role: s.role,
+            dek,
+            dekEpoch: s.dekEpoch,
+            cursor: 0,
+            title: "",
+            entryIds: [],
+            pieces: {},
+          };
+          sharedRef.current.set(s.strandId, live);
+        }
+        await pullSharedStrand(live);
+      }
+      // Forget strands we're no longer a member of (left / removed).
+      const present = new Set(strands.map((s) => s.strandId));
+      for (const id of [...sharedRef.current.keys()]) {
+        if (!present.has(id)) sharedRef.current.delete(id);
+      }
+      publishShared();
+    } catch {
+      // offline / transient — a later trigger retries
+    }
+  }, [ensureIdentity, pullSharedStrand, publishShared]);
+
   // Background sync while open: on unlock, on reconnect, on returning to the
   // app, and on a gentle interval.
   useEffect(() => {
     if (vaultState !== "open" || !tokenRef.current) return;
     void runSync();
     void ensureIdentity();
-    const onOnline = () => void runSync();
-    const onVis = () => document.visibilityState === "visible" && runSync();
+    void loadSharedStrands();
+    const onOnline = () => {
+      void runSync();
+      void loadSharedStrands();
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        void runSync();
+        void loadSharedStrands();
+      }
+    };
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVis);
-    const id = window.setInterval(() => void runSync(), 60_000);
+    const id = window.setInterval(() => {
+      void runSync();
+      void loadSharedStrands();
+    }, 60_000);
     return () => {
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVis);
       clearInterval(id);
     };
-  }, [vaultState, runSync, ensureIdentity]);
+  }, [vaultState, runSync, ensureIdentity, loadSharedStrands]);
 
   // First run: choose a passphrase, create the vault.
   const createVault = useCallback(
@@ -296,6 +430,8 @@ export function useJournal() {
     setStrands([]);
     mediaUrls.current.clear(); // free decrypted image data URLs from memory
     identityRef.current = null;
+    sharedRef.current.clear(); // drop unwrapped strand keys + decrypted shared content
+    setSharedStrands([]);
     setVaultState("locked");
   }, []);
 
@@ -666,6 +802,111 @@ export function useJournal() {
     [createEntry, attachMedia, addToStrand]
   );
 
+  // ---- Shared strands (co-authored, E2E) --------------------------------
+  // These live only in memory (unwrapped DEK + decrypted pieces). The server
+  // stores opaque ciphertext; a breach yields nothing readable. See
+  // SHARING_PLAN.md. v1 is text pieces only. (loadSharedStrands + its helpers
+  // live earlier in the file, near ensureIdentity, because the open effect
+  // depends on them.)
+
+  // Start a new shared strand you own: mint a DEK, register it (wrapped to
+  // yourself), and push an initial meta record. Returns an error message or null.
+  const createSharedStrand = useCallback(
+    async (title: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      if (!token) return "Connect an account in Settings first, so you can share.";
+      await ensureIdentity();
+      const kp = identityRef.current;
+      if (!kp) return "Sharing isn't ready yet — give it a moment and try again.";
+      try {
+        const dek = await generateDEK();
+        const strandId = uid();
+        const selfPub = await exportPublicKeyB64(kp.publicKey);
+        const { ephemeralPub, wrappedDEK } = await wrapDEKForRecipient(selfPub, dek);
+        await createShared(token, strandId, ephemeralPub, wrappedDEK);
+        const t = Date.now();
+        const clean = title.trim() || "Untitled";
+        const metaContent = await encryptString(dek, encodeStrand(clean, []));
+        await sharedPush(token, strandId, [
+          { kind: "meta", id: "meta", createdAt: t, updatedAt: t, deleted: false, dekEpoch: 1, content: metaContent },
+        ]);
+        sharedRef.current.set(strandId, {
+          strandId,
+          ownerId: "me",
+          role: "owner",
+          dek,
+          dekEpoch: 1,
+          cursor: 0,
+          title: clean,
+          entryIds: [],
+          pieces: {},
+        });
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't create the shared strand.";
+      }
+    },
+    [ensureIdentity, publishShared]
+  );
+
+  // Invite someone (by email) into a shared strand: look up their public key,
+  // wrap the strand DEK to it, and register their membership. They must already
+  // have a Driftless account. Returns an error message or null.
+  const inviteToSharedStrand = useCallback(
+    async (strandId: string, email: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return "This strand isn't ready to share yet.";
+      const em = email.trim().toLowerCase();
+      if (!em) return "Enter an email to share with.";
+      try {
+        const { identityPublicKey } = await fetchKeys(token, em);
+        if (!identityPublicKey)
+          return "No Driftless account for that email yet — ask them to sign up first, then invite.";
+        const { ephemeralPub, wrappedDEK } = await wrapDEKForRecipient(identityPublicKey, live.dek);
+        await inviteToStrand(token, strandId, em, ephemeralPub, wrappedDEK, live.dekEpoch);
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't send that invite.";
+      }
+    },
+    []
+  );
+
+  // Add a piece to a shared strand: encrypt with the DEK and push it plus the
+  // updated order. Shared content is server-backed (not local-first), so the UI
+  // reflects it only once the push succeeds. Returns an error message or null.
+  const writeInSharedStrand = useCallback(
+    async (strandId: string, text: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return "This strand isn't ready yet.";
+      const body = text.trim();
+      if (!body) return null;
+      try {
+        const pieceId = uid();
+        const t = Date.now();
+        const entryIds = [...live.entryIds, pieceId];
+        const pieceContent = await encryptString(live.dek, encodePayload(body));
+        const metaContent = await encryptString(live.dek, encodeStrand(live.title, entryIds));
+        await sharedPush(token, strandId, [
+          { kind: "piece", id: pieceId, createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: pieceContent },
+          { kind: "meta", id: "meta", createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: metaContent },
+        ] as SharedRecord[]);
+        live.entryIds = entryIds;
+        live.pieces[pieceId] = { id: pieceId, text: body, createdAt: t, updatedAt: t };
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error
+          ? e.message
+          : "Couldn't add that just now — check your connection and try again.";
+      }
+    },
+    [publishShared]
+  );
+
   // ---- Sync account (opt-in) --------------------------------------------
 
   // Create a sync account from THIS device's existing vault, then upload
@@ -734,6 +975,8 @@ export function useJournal() {
   const disconnectAccount = useCallback(async () => {
     tokenRef.current = null;
     setAccount(null);
+    sharedRef.current.clear();
+    setSharedStrands([]);
     await saveSyncState({ id: "state", cursor: 0 });
   }, []);
 
@@ -777,5 +1020,10 @@ export function useJournal() {
     connectSignIn,
     disconnectAccount,
     syncNow: runSync,
+    sharedStrands,
+    createSharedStrand,
+    inviteToSharedStrand,
+    writeInSharedStrand,
+    refreshShared: loadSharedStrands,
   };
 }

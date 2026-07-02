@@ -10,6 +10,7 @@ import { TagBar } from "./components/TagBar";
 import { Stream } from "./components/Stream";
 import { Timeline } from "./components/Timeline";
 import { StrandsView } from "./components/StrandsView";
+import { SharedView } from "./components/SharedView";
 import { HelpSheet } from "./components/HelpSheet";
 import { Settings } from "./components/Settings";
 import { Toast, type ToastData } from "./components/Toast";
@@ -39,7 +40,7 @@ export default function App() {
   const j = useJournal();
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | null>(null);
-  const [view, setView] = useState<"stream" | "timeline" | "strands">("stream");
+  const [view, setView] = useState<"stream" | "timeline" | "strands" | "shared">("stream");
   const [help, setHelp] = useState<null | "top" | "support">(null);
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<ToastData>(null);
@@ -274,6 +275,14 @@ export default function App() {
         >
           Strands
         </button>
+        <button
+          role="tab"
+          aria-selected={view === "shared"}
+          className={"viewtab" + (view === "shared" ? " active" : "")}
+          onClick={() => setView("shared")}
+        >
+          Shared
+        </button>
       </div>
 
       {view === "stream" && (
@@ -345,6 +354,17 @@ export default function App() {
 
           onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
+        />
+      )}
+
+      {view === "shared" && (
+        <SharedView
+          sharedStrands={j.sharedStrands}
+          account={j.account}
+          onCreate={j.createSharedStrand}
+          onInvite={j.inviteToSharedStrand}
+          onWrite={j.writeInSharedStrand}
+          onRefresh={j.refreshShared}
         />
       )}
 

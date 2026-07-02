@@ -1,7 +1,7 @@
 # Sharing plan — connected & family strands
 
-Status: **S1 + S2 done (server + crypto proven); S3 (client UI) next.** The
-sharing chapter — co-authored,
+Status: **S1 + S2 + S3 done (client flow proven end-to-end); S4 (family strands
++ membership UI) next.** The sharing chapter — co-authored,
 end-to-end-encrypted strands shared with people you love. It builds on the sync
 engine (done; see SYNC_PLAN.md) and is the most security-critical work in the
 app. Design it fully before building; build it foundation-first; test each slice
@@ -129,12 +129,20 @@ gives forward secrecy for *future* content.
    `/members`, `/mine`, `/push`, `/pull`, `/leave`, `/remove`) with DEK epochs.
    **Done & deployed; verified 11/11** (owner creates, invites by public key,
    member unwraps + co-authors, non-member 403, owner-only remove).
-3. **S3 — Share one strand with one person (client).** Make a strand shared →
-   generate DEK → invite by email → recipient sees it in a **Shared** area,
-   unwraps, pulls, decrypts, co-authors. The core end-to-end. Test with a real
-   second account/device.
+3. ✅ **S3 — Share one strand with one person (client).** A **Shared** lens:
+   start a shared strand (mints a DEK, wrapped to yourself) → write text pieces
+   → invite by email (fetch their public key, wrap the DEK, register them) →
+   they see it in their Shared area, unwrap, pull, decrypt, co-author. Meta
+   object carries title + order (LWW); pieces are DEK-encrypted `encodePayload`
+   text; content lives server-side (opaque) and is re-fetched + decrypted per
+   session (in-memory only). **Done & deployed; client flow verified 11/11**
+   against the live server (create → meta → invite → unwrap → pull → decode →
+   co-author, order preserved). Still worth a real 2-person device test.
+   *v1 scope:* text pieces only; no reorder/delete/media in shared yet; leave/
+   remove/rotation is S4.
 4. **S4 — Family strands (N members) + membership UI.** Multiple invites, member
-   list, leave/remove with DEK rotation.
+   list, leave/remove with DEK rotation. (Server endpoints already exist from
+   S2; this is client UI + the rotation flow.)
 5. **S5 — Social recovery.** The family together restores a member who lost their
    passphrase — K-of-N Shamir secret sharing of a recovery secret, each share
    wrapped to a member's public key; the server holds no usable share. The

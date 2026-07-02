@@ -208,6 +208,60 @@ export async function unwrapPrivateKey(vaultKey: CryptoKey, w: WrappedKey): Prom
   ]);
 }
 
+// ---- Shared-strand keys (DEK) + ECIES wrapping --------------------------
+// A shared strand has its own AES key (DEK). To share it, wrap it to a member's
+// public key via an ephemeral ECDH agreement (only they can unwrap). Matches the
+// server-verified scheme in SHARING_PLAN.md.
+
+export type WrappedDEK = { ephemeralPub: string; wrappedDEK: WrappedKey };
+
+export function generateDEK(): Promise<CryptoKey> {
+  return crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+}
+
+export async function wrapDEKForRecipient(recipientPubB64: string, dek: CryptoKey): Promise<WrappedDEK> {
+  const recipient = await importPublicKeyB64(recipientPubB64);
+  const eph = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveKey"]);
+  const wrapKey = await crypto.subtle.deriveKey(
+    { name: "ECDH", public: recipient },
+    eph.privateKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"]
+  );
+  const iv = randomBytes(12);
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: toBuf(iv) },
+    wrapKey,
+    await crypto.subtle.exportKey("raw", dek)
+  );
+  return {
+    ephemeralPub: await exportPublicKeyB64(eph.publicKey),
+    wrappedDEK: { iv: b64(iv), data: b64(new Uint8Array(ct)) },
+  };
+}
+
+export async function unwrapDEK(
+  myPriv: CryptoKey,
+  ephemeralPubB64: string,
+  wrapped: WrappedKey
+): Promise<CryptoKey> {
+  const eph = await importPublicKeyB64(ephemeralPubB64);
+  const wrapKey = await crypto.subtle.deriveKey(
+    { name: "ECDH", public: eph },
+    myPriv,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["decrypt"]
+  );
+  const raw = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: toBuf(fromB64(wrapped.iv)) },
+    wrapKey,
+    toBuf(fromB64(wrapped.data))
+  );
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, true, ["encrypt", "decrypt"]);
+}
+
 // A small known token, encrypted at setup. On unlock we try to decrypt it;
 // success means the passphrase was correct. AES-GCM fails loudly on a wrong
 // key, so this never produces a false positive.

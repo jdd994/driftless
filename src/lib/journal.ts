@@ -246,6 +246,18 @@ export function decodeStrand(decrypted: string): { title: string; entryIds: stri
   return { title: "", entryIds: [] };
 }
 
+// ---- Shared strands (co-authored, E2E) ----
+// A shared strand's pieces are their own text records encrypted with the strand
+// key. Kept simple for v1: text only (no anchors/media/reorder yet).
+export type SharedPiece = { id: string; text: string; createdAt: number; updatedAt: number };
+export type SharedStrandView = {
+  strandId: string;
+  role: string; // 'owner' | 'member'
+  title: string;
+  entryIds: string[];
+  pieces: Record<string, SharedPiece>;
+};
+
 // Resolve a strand's ordered entry ids into entries, skipping any that no
 // longer exist (e.g. deleted thoughts) so dangling references are harmless.
 export function strandEntries(entryIds: string[], byId: Map<string, Entry>): Entry[] {

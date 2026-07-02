@@ -115,3 +115,72 @@ export function pullChanges(
 ): Promise<{ changes: SyncRecord[]; cursor: number; more: boolean }> {
   return req(`/sync/pull?since=${since}`, { token });
 }
+
+// ---- shared strands (S3) ----
+
+export type SharedRecord = {
+  kind: string; // 'piece' | 'meta'
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  deleted: boolean;
+  dekEpoch: number;
+  content: CipherBlob;
+};
+export type SharedStrandInfo = {
+  strandId: string;
+  ownerId: string;
+  role: string;
+  ephemeralPub: string;
+  wrappedDEK: WrappedKey;
+  dekEpoch: number;
+};
+export type StrandMember = { userId: string; role: string; email: string; identityPublicKey: string | null };
+
+export function createShared(
+  token: string,
+  strandId: string,
+  ephemeralPub: string,
+  wrappedDEK: WrappedKey
+): Promise<{ ok: boolean }> {
+  return req("/shared/create", { method: "POST", token, body: { strandId, ephemeralPub, wrappedDEK } });
+}
+
+export function inviteToStrand(
+  token: string,
+  strandId: string,
+  memberEmail: string,
+  ephemeralPub: string,
+  wrappedDEK: WrappedKey,
+  dekEpoch: number
+): Promise<{ ok: boolean; userId: string }> {
+  return req(`/shared/${strandId}/invite`, {
+    method: "POST",
+    token,
+    body: { memberEmail, ephemeralPub, wrappedDEK, dekEpoch },
+  });
+}
+
+export function sharedMembers(token: string, strandId: string): Promise<{ members: StrandMember[] }> {
+  return req(`/shared/${strandId}/members`, { token });
+}
+
+export function sharedMine(token: string): Promise<{ strands: SharedStrandInfo[] }> {
+  return req("/shared/mine", { token });
+}
+
+export function sharedPush(
+  token: string,
+  strandId: string,
+  changes: SharedRecord[]
+): Promise<{ applied: number; cursor: number }> {
+  return req(`/shared/${strandId}/push`, { method: "POST", token, body: { changes } });
+}
+
+export function sharedPull(
+  token: string,
+  strandId: string,
+  since: number
+): Promise<{ changes: SharedRecord[]; cursor: number; more: boolean }> {
+  return req(`/shared/${strandId}/pull?since=${since}`, { token });
+}
