@@ -130,10 +130,12 @@ npm run preview  # serve the built app
    *decrypts* it and never leaves the device. Don't derive the key from the
    login credential.
 5. Niceties (some done): named threads → **Strands (done)**, biometric →
-   **Quick unlock (done)**, richer export → **encrypted Back up (done)**. Still
-   open: a **warm first-run welcome** (what Driftless is / how it helps — the
-   in-app "landing page", key for frictionless word-of-mouth spread; no separate
-   marketing site — the PWA link *is* the distribution); a **calm suggestion
+   **Quick unlock (done)**, richer export → **encrypted Back up (done)**,
+   media in entries/strands → **polaroids (done)**, co-authored shared/family
+   strands → **Sharing S1–S4 (done)**, in-app landing → **warm first-run
+   welcome (done)** — `Welcome.tsx`, the first setup step, states the "no reset"
+   trade up front (the PWA link *is* the distribution; no separate marketing
+   site). Still open: a **calm suggestion
    box** (GitHub Discussions now — zero-infra, engage at your pace; optional
    in-app box posting to our own D1 later — framed "read when I can, no
    obligation"); **media in entries/strands** (see SYNC_PLAN); pin/favorite;

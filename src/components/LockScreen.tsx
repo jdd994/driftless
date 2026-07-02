@@ -1,6 +1,7 @@
 // LockScreen.tsx
 import { useEffect, useRef, useState } from "react";
 import { parseBackup, type Backup } from "../lib/backup";
+import { Welcome } from "./Welcome";
 
 type Props = {
   mode: "needs-setup" | "locked";
@@ -21,6 +22,8 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
   const [signingIn, setSigningIn] = useState(false);
   const [siEmail, setSiEmail] = useState("");
   const [siPass, setSiPass] = useState("");
+  // First run only: show the warm intro before the passphrase step.
+  const [showIntro, setShowIntro] = useState(mode === "needs-setup");
 
   async function signIn() {
     setError(null);
@@ -103,6 +106,10 @@ export function LockScreen({ mode, enrolled, onCreate, onUnlock, onBiometric, on
       setError("Something went wrong. Try again.");
       setBusy(false);
     }
+  }
+
+  if (setup && showIntro) {
+    return <Welcome onBegin={() => setShowIntro(false)} />;
   }
 
   return (

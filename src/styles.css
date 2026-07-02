@@ -819,6 +819,53 @@ kbd {
 }
 .lock-restore:hover { color: var(--ink-soft); }
 
+/* ---------- welcome (first run) ---------- */
+.welcome-screen { align-items: flex-start; }
+.welcome {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 8vh 4px 40px;
+}
+.welcome-brand { font-size: 34px; margin-bottom: 6px; }
+.welcome-tagline {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 19px;
+  color: var(--amber);
+  margin: 0 0 22px;
+}
+.welcome-lead {
+  font-family: var(--serif);
+  font-size: 18px;
+  line-height: 1.65;
+  color: var(--ink);
+  margin: 0 0 26px;
+}
+.welcome-points { list-style: none; margin: 0 0 26px; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+.welcome-points li { display: flex; gap: 13px; align-items: flex-start; }
+.welcome-points div {
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.welcome-points strong { color: var(--ink); font-weight: 600; }
+.welcome-mark { color: var(--amber); font-size: 17px; line-height: 1.4; flex: none; width: 20px; text-align: center; }
+.welcome-warn {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 15px 16px;
+  margin: 0 0 8px;
+}
+.welcome-warn strong { color: var(--amber); font-weight: 600; }
+.welcome-begin { max-width: 360px; margin-left: auto; margin-right: auto; }
+
 /* ---------- strands ---------- */
 .strands { margin-top: 22px; }
 .strand-new { display: flex; gap: 10px; margin: 0 2px 4px; }
