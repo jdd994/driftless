@@ -16,7 +16,7 @@ import {
   importKeyRaw,
   PBKDF2_ITERATIONS,
 } from "../lib/crypto";
-import { compressImage } from "../lib/media";
+import { compressImage, bytesToBase64 } from "../lib/media";
 import {
   biometricSupported,
   enrollBiometric,
@@ -261,8 +261,7 @@ export function useJournal() {
     keyRef.current = null;
     setEntries([]);
     setStrands([]);
-    mediaUrls.current.forEach((u) => URL.revokeObjectURL(u));
-    mediaUrls.current.clear();
+    mediaUrls.current.clear(); // free decrypted image data URLs from memory
     setVaultState("locked");
   }, []);
 
@@ -408,11 +407,7 @@ export function useJournal() {
       );
       if (updated) await guardedPersist(updated);
       await deleteMedia(mediaId);
-      const url = mediaUrls.current.get(mediaId);
-      if (url) {
-        URL.revokeObjectURL(url);
-        mediaUrls.current.delete(mediaId);
-      }
+      mediaUrls.current.delete(mediaId);
     },
     [guardedPersist]
   );
@@ -428,7 +423,9 @@ export function useJournal() {
     if (!m || m.deleted) return null;
     try {
       const bytes = await decryptBytes(key, { iv: m.iv, data: m.data });
-      const url = URL.createObjectURL(new Blob([bytes], { type: m.type }));
+      // data: URL (not blob:) so it displays under the existing CSP, regardless
+      // of cache freshness. Cached in-memory to avoid re-decrypting.
+      const url = `data:${m.type};base64,${bytesToBase64(bytes)}`;
       mediaUrls.current.set(id, url);
       return url;
     } catch {

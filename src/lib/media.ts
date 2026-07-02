@@ -5,6 +5,19 @@
 export const MAX_DIM = 1600; // longest edge, px
 export const QUALITY = 0.85;
 
+// Base64-encode bytes (chunked, so large images don't overflow the call stack).
+// Used to build data: URLs for display — allowed by the CSP everywhere, unlike
+// blob: URLs.
+export function bytesToBase64(buf: ArrayBuffer): string {
+  const u8 = new Uint8Array(buf);
+  let s = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < u8.length; i += chunk) {
+    s += String.fromCharCode(...u8.subarray(i, i + chunk));
+  }
+  return btoa(s);
+}
+
 // Returns compressed JPEG bytes + mime type. Falls back to the original file
 // bytes if canvas encoding isn't available.
 export async function compressImage(file: File): Promise<{ bytes: ArrayBuffer; type: string }> {

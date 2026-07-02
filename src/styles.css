@@ -475,21 +475,34 @@ kbd {
 .media-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 16px;
+  margin-top: 12px;
+  padding: 4px 2px;
 }
+/* Polaroids — warm paper frame, soft shadow, gently woven-in tilt. */
 .media-thumb {
   position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--line-soft);
-  max-width: 100%;
+  display: inline-block;
+  background: #f3ecdd;
+  padding: 8px 8px 24px;
+  border-radius: 2px;
+  box-shadow: 0 10px 22px -12px rgba(0, 0, 0, 0.75);
+  transform: rotate(-1.6deg);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  max-width: 260px;
+}
+.media-thumb:nth-child(even) { transform: rotate(1.6deg); }
+.media-thumb:hover {
+  transform: rotate(0deg);
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.8);
 }
 .media-thumb img {
   display: block;
-  max-width: 100%;
+  width: 100%;
+  height: auto;
   max-height: 40vh;
   object-fit: cover;
+  border-radius: 1px;
 }
 .media-remove {
   position: absolute;
