@@ -1136,6 +1136,90 @@ export function useJournal() {
     []
   );
 
+  // Add one piece to a shared strand carrying text and/or photos together (so
+  // words and pictures intertwine, like a personal strand). Compresses every
+  // photo first, so a bad/unsupported image fails before anything is uploaded.
+  const addSharedPiece = useCallback(
+    async (strandId: string, text: string, files: File[]): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return "This strand isn't ready yet.";
+      const body = text.trim();
+      if (!body && files.length === 0) return null;
+      try {
+        const compressed = [];
+        for (const f of files) compressed.push(await compressImage(f));
+        const mediaIds: string[] = [];
+        for (const c of compressed) {
+          const cb = await encryptBytes(live.dek, c.bytes);
+          const mediaId = uid();
+          await uploadSharedMedia(token, strandId, mediaId, cb.iv, cb.data, c.type);
+          mediaIds.push(mediaId);
+        }
+        const pieceId = uid();
+        const t = Date.now();
+        const entryIds = [...sharedPieces(live).map((p) => p.id), pieceId];
+        const content = await encryptString(live.dek, encodePayload(body, undefined, mediaIds.length ? mediaIds : undefined));
+        const meta = await encryptString(live.dek, encodeStrand(live.title, entryIds));
+        await sharedPush(token, strandId, [
+          { kind: "piece", id: pieceId, createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content },
+          { kind: "meta", id: "meta", createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: meta },
+        ] as SharedRecord[]);
+        live.entryIds = entryIds;
+        live.pieces[pieceId] = { id: pieceId, text: body, mediaIds: mediaIds.length ? mediaIds : undefined, createdAt: t, updatedAt: t };
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't add that just now — try again.";
+      }
+    },
+    [publishShared]
+  );
+
+  // Edit a shared piece's text (photos unchanged).
+  const editSharedPiece = useCallback(
+    async (strandId: string, pieceId: string, text: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      const piece = live?.pieces[pieceId];
+      if (!token || !live || !piece) return "This strand isn't ready yet.";
+      try {
+        const t = Date.now();
+        const content = await encryptString(live.dek, encodePayload(text.trim(), undefined, piece.mediaIds));
+        await sharedPush(token, strandId, [
+          { kind: "piece", id: pieceId, createdAt: piece.createdAt, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content },
+        ] as SharedRecord[]);
+        live.pieces[pieceId] = { ...piece, text: text.trim(), updatedAt: t };
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't save that edit.";
+      }
+    },
+    [publishShared]
+  );
+
+  // Reorder a shared strand's pieces (updates the order in the meta record).
+  const reorderSharedStrand = useCallback(
+    async (strandId: string, entryIds: string[]): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return "This strand isn't ready yet.";
+      try {
+        const t = Date.now();
+        await sharedPush(token, strandId, [
+          { kind: "meta", id: "meta", createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: await encryptString(live.dek, encodeStrand(live.title, entryIds)) },
+        ] as SharedRecord[]);
+        live.entryIds = entryIds;
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't reorder that.";
+      }
+    },
+    [publishShared]
+  );
+
   // Who's in a shared strand (name + role), for the members panel.
   const fetchStrandMembers = useCallback(async (strandId: string): Promise<StrandMember[]> => {
     const token = tokenRef.current;
@@ -1396,6 +1480,9 @@ export function useJournal() {
     createInviteLink,
     joinViaInvite,
     addPhotoToSharedStrand,
+    addSharedPiece,
+    editSharedPiece,
+    reorderSharedStrand,
     getSharedMediaUrl,
     renameSharedStrand,
     deleteSharedPiece,

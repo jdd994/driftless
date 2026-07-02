@@ -419,8 +419,9 @@ export default function App() {
           account={j.account}
           onCreate={j.createSharedStrand}
           onInvite={j.inviteToSharedStrand}
-          onWrite={j.writeInSharedStrand}
-          onAddPhoto={j.addPhotoToSharedStrand}
+          onAddPiece={j.addSharedPiece}
+          onEditPiece={j.editSharedPiece}
+          onReorder={j.reorderSharedStrand}
           onMediaUrl={j.getSharedMediaUrl}
           onRename={j.renameSharedStrand}
           onDeletePiece={j.deleteSharedPiece}

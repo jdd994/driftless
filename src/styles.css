@@ -1035,6 +1035,9 @@ kbd {
 .shared-piece-body { flex: 1; min-width: 0; }
 .shared-piece-del { flex: none; font-size: 13px; line-height: 1; padding: 4px 5px; color: var(--ink-faint); opacity: 0.5; }
 .shared-piece-del:hover { opacity: 1; color: var(--amber); }
+.shared-piece-text { cursor: text; }
+.compose-photos { font-family: var(--sans); font-size: 12px; color: var(--ink-soft); display: inline-flex; align-items: center; gap: 4px; }
+.compose-photos .act { font-size: 12px; padding: 2px 4px; color: var(--ink-faint); }
 
 .strand-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 2px 4px; }
 .strand-top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
