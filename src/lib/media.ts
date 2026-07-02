@@ -34,7 +34,7 @@ export async function compressImage(file: File): Promise<{ bytes: ArrayBuffer; t
   } catch {
     if (isHeic(file)) {
       throw new Error(
-        "iPhone photos (HEIC) can't be added from a computer here — add it from your phone (it converts automatically), or save it as JPEG first."
+        "This photo is in Apple's HEIC format, which this device can't open. Convert it to a JPEG first — e.g. open it in Google Photos, tap Edit, then Save copy — and add that."
       );
     }
     throw new Error("Couldn't read that image — try a JPEG or PNG.");
