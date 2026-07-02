@@ -39,3 +39,39 @@ CREATE TABLE IF NOT EXISTS objects (
   PRIMARY KEY (user_id, kind, id)
 );
 CREATE INDEX IF NOT EXISTS objects_by_seq ON objects(user_id, seq);
+
+-- ---- Sharing (S2) --------------------------------------------------------
+-- Shared strands: end-to-end encrypted, readable only by members. The server
+-- gates access by membership and stores opaque ciphertext + each member's
+-- wrapped copy of the strand key. See SHARING_PLAN.md.
+
+CREATE TABLE IF NOT EXISTS shared_strands (
+  strand_id  TEXT PRIMARY KEY,
+  owner_id   TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS strand_members (
+  strand_id     TEXT NOT NULL REFERENCES shared_strands(strand_id),
+  user_id       TEXT NOT NULL REFERENCES users(id),
+  role          TEXT NOT NULL,        -- 'owner' | 'member'
+  ephemeral_pub TEXT NOT NULL,        -- for unwrapping the DEK
+  wrapped_dek   TEXT NOT NULL,        -- this member's wrapped strand key (JSON)
+  dek_epoch     INTEGER NOT NULL,     -- which DEK version this wrap is for
+  added_at      INTEGER NOT NULL,
+  PRIMARY KEY (strand_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS shared_objects (
+  strand_id  TEXT NOT NULL REFERENCES shared_strands(strand_id),
+  kind       TEXT NOT NULL,           -- 'piece' | 'meta' | 'media'
+  id         TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted    INTEGER NOT NULL DEFAULT 0,
+  content    TEXT NOT NULL,           -- opaque, DEK-encrypted
+  dek_epoch  INTEGER NOT NULL,
+  seq        INTEGER NOT NULL,        -- per-strand monotonic; the pull cursor
+  PRIMARY KEY (strand_id, id)
+);
+CREATE INDEX IF NOT EXISTS shared_objects_by_seq ON shared_objects(strand_id, seq);

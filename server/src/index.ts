@@ -145,6 +145,219 @@ app.get("/sync/pull", requireAuth, async (c) => {
   return c.json({ changes, cursor, more: results.length === PULL_LIMIT });
 });
 
+// ---- Sharing (S2): membership-gated shared strands ----------------------
+
+async function membership(db: D1Database, strandId: string, userId: string) {
+  return db
+    .prepare("SELECT role FROM strand_members WHERE strand_id = ? AND user_id = ?")
+    .bind(strandId, userId)
+    .first<{ role: string }>();
+}
+async function maxSharedSeq(db: D1Database, strandId: string): Promise<number> {
+  const r = await db
+    .prepare("SELECT COALESCE(MAX(seq), 0) AS m FROM shared_objects WHERE strand_id = ?")
+    .bind(strandId)
+    .first<{ m: number }>();
+  return r?.m ?? 0;
+}
+function validSharedChange(ch: any): boolean {
+  return (
+    ch &&
+    typeof ch.kind === "string" &&
+    typeof ch.id === "string" &&
+    typeof ch.createdAt === "number" &&
+    typeof ch.updatedAt === "number" &&
+    typeof ch.deleted === "boolean" &&
+    typeof ch.dekEpoch === "number" &&
+    isCipherBlob(ch.content)
+  );
+}
+const UPSERT_SHARED = `
+INSERT INTO shared_objects (strand_id, kind, id, created_at, updated_at, deleted, content, dek_epoch, seq)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(strand_id, id) DO UPDATE SET
+  updated_at = excluded.updated_at,
+  deleted    = excluded.deleted,
+  content    = excluded.content,
+  dek_epoch  = excluded.dek_epoch,
+  seq        = excluded.seq
+WHERE excluded.updated_at >= shared_objects.updated_at`;
+
+// Create a shared strand + the owner's own membership (their wrapped DEK).
+app.post("/shared/create", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const b = await c.req.json().catch(() => null);
+  const { strandId, ephemeralPub, wrappedDEK } = b ?? {};
+  if (typeof strandId !== "string" || typeof ephemeralPub !== "string" || !wrappedDEK) {
+    return c.json({ error: "missing fields" }, 400);
+  }
+  const exists = await c.env.DB.prepare("SELECT strand_id FROM shared_strands WHERE strand_id = ?")
+    .bind(strandId)
+    .first();
+  if (exists) return c.json({ error: "strand already exists" }, 409);
+  const now = Date.now();
+  await c.env.DB.batch([
+    c.env.DB.prepare("INSERT INTO shared_strands (strand_id, owner_id, created_at) VALUES (?, ?, ?)").bind(
+      strandId,
+      userId,
+      now
+    ),
+    c.env.DB.prepare(
+      "INSERT INTO strand_members (strand_id, user_id, role, ephemeral_pub, wrapped_dek, dek_epoch, added_at) VALUES (?, ?, 'owner', ?, ?, 1, ?)"
+    ).bind(strandId, userId, ephemeralPub, JSON.stringify(wrappedDEK), now),
+  ]);
+  return c.json({ ok: true });
+});
+
+// Invite a member (any member can; they hold the DEK to wrap for the invitee).
+app.post("/shared/:id/invite", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  const b = await c.req.json().catch(() => null);
+  const email = (b?.memberEmail ?? "").trim().toLowerCase();
+  const { ephemeralPub, wrappedDEK, dekEpoch } = b ?? {};
+  if (!email || typeof ephemeralPub !== "string" || !wrappedDEK || typeof dekEpoch !== "number") {
+    return c.json({ error: "missing fields" }, 400);
+  }
+  const member = await c.env.DB.prepare("SELECT id FROM users WHERE email = ?")
+    .bind(email)
+    .first<{ id: string }>();
+  if (!member) return c.json({ error: "No Driftless account for that email." }, 404);
+  await c.env.DB.prepare(
+    `INSERT INTO strand_members (strand_id, user_id, role, ephemeral_pub, wrapped_dek, dek_epoch, added_at)
+     VALUES (?, ?, 'member', ?, ?, ?, ?)
+     ON CONFLICT(strand_id, user_id) DO UPDATE SET ephemeral_pub = excluded.ephemeral_pub, wrapped_dek = excluded.wrapped_dek, dek_epoch = excluded.dek_epoch`
+  )
+    .bind(strandId, member.id, ephemeralPub, JSON.stringify(wrappedDEK), dekEpoch, Date.now())
+    .run();
+  return c.json({ ok: true, userId: member.id });
+});
+
+// Members + their public keys (for re-wrapping / rotation).
+app.get("/shared/:id/members", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  const rows = await c.env.DB.prepare(
+    "SELECT m.user_id, m.role, u.email, u.identity_pub FROM strand_members m JOIN users u ON u.id = m.user_id WHERE m.strand_id = ?"
+  )
+    .bind(strandId)
+    .all<{ user_id: string; role: string; email: string; identity_pub: string | null }>();
+  return c.json({
+    members: (rows.results ?? []).map((r) => ({
+      userId: r.user_id,
+      role: r.role,
+      email: r.email,
+      identityPublicKey: r.identity_pub,
+    })),
+  });
+});
+
+// Strands I'm a member of, each with MY wrapped DEK.
+app.get("/shared/mine", requireAuth, async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT s.strand_id, s.owner_id, m.role, m.ephemeral_pub, m.wrapped_dek, m.dek_epoch FROM strand_members m JOIN shared_strands s ON s.strand_id = m.strand_id WHERE m.user_id = ?"
+  )
+    .bind(c.get("userId"))
+    .all<{ strand_id: string; owner_id: string; role: string; ephemeral_pub: string; wrapped_dek: string; dek_epoch: number }>();
+  return c.json({
+    strands: (rows.results ?? []).map((r) => ({
+      strandId: r.strand_id,
+      ownerId: r.owner_id,
+      role: r.role,
+      ephemeralPub: r.ephemeral_pub,
+      wrappedDEK: JSON.parse(r.wrapped_dek),
+      dekEpoch: r.dek_epoch,
+    })),
+  });
+});
+
+app.post("/shared/:id/push", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  const b = await c.req.json().catch(() => null);
+  const changes = b?.changes;
+  if (!Array.isArray(changes)) return c.json({ error: "changes must be an array" }, 400);
+  if (changes.length > MAX_PUSH) return c.json({ error: `too many changes (max ${MAX_PUSH})` }, 400);
+  for (const ch of changes) if (!validSharedChange(ch)) return c.json({ error: "malformed change" }, 400);
+  let applied = 0;
+  if (changes.length > 0) {
+    const base = await maxSharedSeq(c.env.DB, strandId);
+    const stmts = changes.map((ch, i) =>
+      c.env.DB.prepare(UPSERT_SHARED).bind(
+        strandId,
+        ch.kind,
+        ch.id,
+        ch.createdAt,
+        ch.updatedAt,
+        ch.deleted ? 1 : 0,
+        JSON.stringify(ch.content),
+        ch.dekEpoch,
+        base + i + 1
+      )
+    );
+    const res = await c.env.DB.batch(stmts);
+    applied = res.reduce((n, r) => n + (r.meta?.changes ?? 0), 0);
+  }
+  return c.json({ applied, cursor: await maxSharedSeq(c.env.DB, strandId) });
+});
+
+app.get("/shared/:id/pull", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  if (!(await membership(c.env.DB, strandId, c.get("userId")))) return c.json({ error: "not a member" }, 403);
+  const since = Math.max(0, Number(c.req.query("since") ?? "0") || 0);
+  const rows = await c.env.DB.prepare(
+    "SELECT kind, id, created_at, updated_at, deleted, content, dek_epoch, seq FROM shared_objects WHERE strand_id = ? AND seq > ? ORDER BY seq LIMIT ?"
+  )
+    .bind(strandId, since, PULL_LIMIT)
+    .all<{
+      kind: string;
+      id: string;
+      created_at: number;
+      updated_at: number;
+      deleted: number;
+      content: string;
+      dek_epoch: number;
+      seq: number;
+    }>();
+  const results = rows.results ?? [];
+  const changes = results.map((r) => ({
+    kind: r.kind,
+    id: r.id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deleted: r.deleted === 1,
+    content: JSON.parse(r.content),
+    dekEpoch: r.dek_epoch,
+  }));
+  const cursor = results.length ? results[results.length - 1].seq : since;
+  return c.json({ changes, cursor, more: results.length === PULL_LIMIT });
+});
+
+app.post("/shared/:id/leave", requireAuth, async (c) => {
+  const strandId = c.req.param("id")!;
+  await c.env.DB.prepare("DELETE FROM strand_members WHERE strand_id = ? AND user_id = ?")
+    .bind(strandId, c.get("userId"))
+    .run();
+  return c.json({ ok: true });
+});
+
+// Owner removes a member. (DEK rotation for future secrecy is client-driven — S4.)
+app.post("/shared/:id/remove", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const strandId = c.req.param("id")!;
+  const s = await c.env.DB.prepare("SELECT owner_id FROM shared_strands WHERE strand_id = ?")
+    .bind(strandId)
+    .first<{ owner_id: string }>();
+  if (!s || s.owner_id !== userId) return c.json({ error: "only the owner can remove members" }, 403);
+  const b = await c.req.json().catch(() => null);
+  const target = b?.userId;
+  if (typeof target !== "string" || target === userId) return c.json({ error: "bad target" }, 400);
+  await c.env.DB.prepare("DELETE FROM strand_members WHERE strand_id = ? AND user_id = ?")
+    .bind(strandId, target)
+    .run();
+  return c.json({ ok: true });
+});
+
 // Create an account + store the vault metadata and identity public key.
 app.post("/auth/register", async (c) => {
   const body = await c.req.json().catch(() => null);

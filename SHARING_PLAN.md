@@ -1,6 +1,7 @@
 # Sharing plan — connected & family strands
 
-Status: **planned, not started.** This is the sharing chapter — co-authored,
+Status: **S1 + S2 done (server + crypto proven); S3 (client UI) next.** The
+sharing chapter — co-authored,
 end-to-end-encrypted strands shared with people you love. It builds on the sync
 engine (done; see SYNC_PLAN.md) and is the most security-critical work in the
 app. Design it fully before building; build it foundation-first; test each slice
@@ -120,13 +121,14 @@ gives forward secrecy for *future* content.
 
 ## Phases (foundation-first; each shippable; test with a real 2nd person)
 
-1. **S1 — Identity keys.** Generate ECDH keypair at account setup; migrate
-   existing accounts on next unlock. Upload public key; store private key wrapped
-   by the vault key, locally + server-side (for portability). *Deliver:* two
-   accounts can look up each other's public keys. Invisible, safe, testable.
-2. **S2 — Server shared model.** Tables + endpoints above, with membership access
-   control and DEK epochs. Verify with curl (create, invite, push/pull as two
-   users, non-member denied).
+1. ✅ **S1 — Identity keys.** ECDH keypair at account setup; migrates existing
+   accounts on next unlock; public uploaded, private wrapped by the vault key,
+   stored locally + server-side. **Done & deployed; verified 8/8.**
+2. ✅ **S2 — Server shared model.** `shared_strands` / `strand_members` /
+   `shared_objects` + membership-gated endpoints (`/shared/create`, `/invite`,
+   `/members`, `/mine`, `/push`, `/pull`, `/leave`, `/remove`) with DEK epochs.
+   **Done & deployed; verified 11/11** (owner creates, invites by public key,
+   member unwraps + co-authors, non-member 403, owner-only remove).
 3. **S3 — Share one strand with one person (client).** Make a strand shared →
    generate DEK → invite by email → recipient sees it in a **Shared** area,
    unwraps, pulls, decrypts, co-authors. The core end-to-end. Test with a real
