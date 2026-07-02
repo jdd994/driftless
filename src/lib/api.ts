@@ -90,6 +90,11 @@ export function fetchVault(token: string): Promise<VaultMetaDTO> {
   return req("/vault", { token });
 }
 
+// This account's own user id (for authorship of shared pieces).
+export function fetchMe(token: string): Promise<{ userId: string }> {
+  return req("/me", { token });
+}
+
 // Public-key directory (for future sharing).
 export function fetchKeys(
   token: string,

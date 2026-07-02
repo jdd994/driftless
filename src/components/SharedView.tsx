@@ -12,6 +12,7 @@ import { MediaThumb } from "./EntryItem";
 type Props = {
   sharedStrands: SharedStrandView[];
   account: string | null;
+  myUserId: string | null;
   onCreate: (title: string) => Promise<string | null>;
   onInvite: (strandId: string, email: string) => Promise<string | null>;
   onAddPiece: (strandId: string, text: string, files: File[]) => Promise<string | null>;
@@ -143,6 +144,7 @@ type DetailProps = Omit<Props, "sharedStrands" | "account" | "onCreate" | "onRef
 
 function SharedDetail({
   strand,
+  myUserId,
   onBack,
   onInvite,
   onAddPiece,
@@ -158,6 +160,9 @@ function SharedDetail({
 }: DetailProps) {
   const isOwner = strand.role === "owner";
   const ordered = useMemo(() => sharedPieces(strand), [strand]);
+  // You can edit/delete your own pieces; the owner can manage any. (A piece with
+  // no recorded author is a legacy one — only the owner touches those.)
+  const canEdit = (p: SharedPiece) => isOwner || (!!myUserId && p.author === myUserId);
 
   // compose
   const [compose, setCompose] = useState("");
@@ -332,7 +337,7 @@ function SharedDetail({
         </div>
       </div>
 
-      {editingTitle ? (
+      {editingTitle && isOwner ? (
         <input
           className="anchor-input strand-title-input"
           autoFocus
@@ -344,8 +349,9 @@ function SharedDetail({
       ) : (
         <h2
           className="strand-title"
-          title="Rename"
+          title={isOwner ? "Rename" : undefined}
           onClick={() => {
+            if (!isOwner) return;
             setTitleDraft(strand.title);
             setEditingTitle(true);
           }}
@@ -460,15 +466,21 @@ function SharedDetail({
           {ordered.map((p, i) => (
             <div key={p.id} className="strand-piece">
               <div className="strand-piece-ctl">
-                <button className="act" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
-                  ↑
-                </button>
-                <button className="act" disabled={i === ordered.length - 1} onClick={() => move(i, 1)} title="Move down">
-                  ↓
-                </button>
-                <button className="act" onClick={() => deletePiece(p.id)} title="Remove from strand">
-                  ✕
-                </button>
+                {isOwner && (
+                  <>
+                    <button className="act" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
+                      ↑
+                    </button>
+                    <button className="act" disabled={i === ordered.length - 1} onClick={() => move(i, 1)} title="Move down">
+                      ↓
+                    </button>
+                  </>
+                )}
+                {canEdit(p) && (
+                  <button className="act" onClick={() => deletePiece(p.id)} title="Remove from strand">
+                    ✕
+                  </button>
+                )}
               </div>
               <div className="shared-piece-body">
                 {editingId === p.id ? (
@@ -486,11 +498,14 @@ function SharedDetail({
                     }}
                   />
                 ) : (
-                  p.text && (
+                  p.text &&
+                  (canEdit(p) ? (
                     <p className="shared-piece-text" title="Tap to edit" onClick={() => startEdit(p)}>
                       {p.text}
                     </p>
-                  )
+                  ) : (
+                    <p>{p.text}</p>
+                  ))
                 )}
                 {photos(p)}
               </div>

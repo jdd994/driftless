@@ -70,6 +70,9 @@ const TOO_MANY = "Too many attempts from here — please wait a little and try a
 
 app.get("/health", (c) => c.json({ ok: true, service: "driftless-server" }));
 
+// Who am I? (the token's user id) — used to mark authorship of shared pieces.
+app.get("/me", requireAuth, (c) => c.json({ userId: c.get("userId") }));
+
 // ---- Media (M1: personal photos) -----------------------------------------
 // R2 stores an opaque blob: iv||ciphertext, already encrypted on the device
 // with the vault key. Keyed by owner; only the owner can read it back. Type is

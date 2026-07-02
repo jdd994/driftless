@@ -417,6 +417,7 @@ export default function App() {
         <SharedView
           sharedStrands={j.sharedStrands}
           account={j.account}
+          myUserId={j.myUserId}
           onCreate={j.createSharedStrand}
           onInvite={j.inviteToSharedStrand}
           onAddPiece={j.addSharedPiece}

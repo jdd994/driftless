@@ -63,6 +63,7 @@ import {
   register,
   login,
   fetchVault,
+  fetchMe,
   setIdentity,
   fetchKeys,
   createShared,
@@ -129,6 +130,8 @@ export function useJournal() {
   const [bioEnrolled, setBioEnrolled] = useState(false);
   const [account, setAccount] = useState<string | null>(null); // synced account email, or null
   const [sharedStrands, setSharedStrands] = useState<SharedStrandView[]>([]);
+  const [myUserId, setMyUserId] = useState<string | null>(null); // this account's id (shared authorship)
+  const myUserIdRef = useRef<string | null>(null);
   const keyRef = useRef<CryptoKey | null>(null);
   const tokenRef = useRef<string | null>(null); // sync auth token (NOT the key)
   const syncingRef = useRef(false);
@@ -280,8 +283,8 @@ export function useJournal() {
               delete live.pieces[rec.id];
               continue;
             }
-            const { text, mediaIds } = decodePayload(await decryptString(live.dek, rec.content));
-            live.pieces[rec.id] = { id: rec.id, text, mediaIds, createdAt: rec.createdAt, updatedAt: rec.updatedAt };
+            const { text, mediaIds, author } = decodePayload(await decryptString(live.dek, rec.content));
+            live.pieces[rec.id] = { id: rec.id, text, mediaIds, author, createdAt: rec.createdAt, updatedAt: rec.updatedAt };
           }
         } catch {
           // undecryptable (e.g. a future DEK epoch) — skip rather than crash
@@ -297,6 +300,15 @@ export function useJournal() {
   const loadSharedStrands = useCallback(async () => {
     const token = tokenRef.current;
     if (!token) return;
+    if (!myUserIdRef.current) {
+      try {
+        const { userId } = await fetchMe(token);
+        myUserIdRef.current = userId;
+        setMyUserId(userId);
+      } catch {
+        // offline / transient — a later load retries
+      }
+    }
     await ensureIdentity();
     const kp = identityRef.current;
     if (!kp) return;
@@ -389,7 +401,7 @@ export function useJournal() {
       const em = email.trim().toLowerCase();
       try {
         const kp = await generateIdentityKeypair();
-        const { token } = await register(
+        const { token, userId } = await register(
           em,
           password,
           { salt: v.salt, verifier: v.verifier, iterations: v.iterations },
@@ -398,6 +410,8 @@ export function useJournal() {
         );
         identityRef.current = kp;
         tokenRef.current = token;
+        myUserIdRef.current = userId;
+        setMyUserId(userId);
         await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
         setAccount(em);
         await markAllDirty(); // a fresh account gets the WHOLE journal, not just recent edits
@@ -511,6 +525,8 @@ export function useJournal() {
     identityRef.current = null;
     sharedRef.current.clear(); // drop unwrapped strand keys + decrypted shared content
     setSharedStrands([]);
+    myUserIdRef.current = null;
+    setMyUserId(null);
     setVaultState("locked");
   }, []);
 
@@ -1159,14 +1175,15 @@ export function useJournal() {
         const pieceId = uid();
         const t = Date.now();
         const entryIds = [...sharedPieces(live).map((p) => p.id), pieceId];
-        const content = await encryptString(live.dek, encodePayload(body, undefined, mediaIds.length ? mediaIds : undefined));
+        const author = myUserIdRef.current ?? undefined;
+        const content = await encryptString(live.dek, encodePayload(body, undefined, mediaIds.length ? mediaIds : undefined, undefined, author));
         const meta = await encryptString(live.dek, encodeStrand(live.title, entryIds));
         await sharedPush(token, strandId, [
           { kind: "piece", id: pieceId, createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content },
           { kind: "meta", id: "meta", createdAt: t, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content: meta },
         ] as SharedRecord[]);
         live.entryIds = entryIds;
-        live.pieces[pieceId] = { id: pieceId, text: body, mediaIds: mediaIds.length ? mediaIds : undefined, createdAt: t, updatedAt: t };
+        live.pieces[pieceId] = { id: pieceId, text: body, mediaIds: mediaIds.length ? mediaIds : undefined, author, createdAt: t, updatedAt: t };
         publishShared();
         return null;
       } catch (e) {
@@ -1185,7 +1202,7 @@ export function useJournal() {
       if (!token || !live || !piece) return "This strand isn't ready yet.";
       try {
         const t = Date.now();
-        const content = await encryptString(live.dek, encodePayload(text.trim(), undefined, piece.mediaIds));
+        const content = await encryptString(live.dek, encodePayload(text.trim(), undefined, piece.mediaIds, undefined, piece.author));
         await sharedPush(token, strandId, [
           { kind: "piece", id: pieceId, createdAt: piece.createdAt, updatedAt: t, deleted: false, dekEpoch: live.dekEpoch, content },
         ] as SharedRecord[]);
@@ -1263,7 +1280,7 @@ export function useJournal() {
         updatedAt: t,
         deleted: false,
         dekEpoch: newEpoch,
-        content: await encryptString(newDek, encodePayload(p.text)),
+        content: await encryptString(newDek, encodePayload(p.text, undefined, p.mediaIds, undefined, p.author)),
       });
     }
     // Push in bounded batches (server caps a push; family strands are small).
@@ -1400,7 +1417,9 @@ export function useJournal() {
         return "This device already has a journal — sign-in is for a new device.";
       const em = email.trim().toLowerCase();
       try {
-        const { token } = await login(em, password);
+        const { token, userId } = await login(em, password);
+        myUserIdRef.current = userId;
+        setMyUserId(userId);
         const meta = await fetchVault(token);
         await saveVault({
           id: "vault",
@@ -1427,6 +1446,8 @@ export function useJournal() {
     setAccount(null);
     sharedRef.current.clear();
     setSharedStrands([]);
+    myUserIdRef.current = null;
+    setMyUserId(null);
     await saveSyncState({ id: "state", cursor: 0 });
   }, []);
 
@@ -1486,6 +1507,7 @@ export function useJournal() {
     getSharedMediaUrl,
     renameSharedStrand,
     deleteSharedPiece,
+    myUserId,
     refreshShared: loadSharedStrands,
   };
 }

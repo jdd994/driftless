@@ -54,18 +54,21 @@ type Payload = {
   anchor?: Anchor;
   mediaIds?: string[];
   mediaConfig?: Record<string, MediaConfig>;
+  author?: string; // shared pieces only: the user id who wrote it
 };
 
 export function encodePayload(
   text: string,
   anchor?: Anchor,
   mediaIds?: string[],
-  mediaConfig?: Record<string, MediaConfig>
+  mediaConfig?: Record<string, MediaConfig>,
+  author?: string
 ): string {
   const p: Payload = { __driftless: 1, text };
   if (hasAnchor(anchor)) p.anchor = anchor;
   if (mediaIds && mediaIds.length) p.mediaIds = mediaIds;
   if (mediaConfig && Object.keys(mediaConfig).length) p.mediaConfig = mediaConfig;
+  if (author) p.author = author;
   return JSON.stringify(p);
 }
 
@@ -74,6 +77,7 @@ export function decodePayload(decrypted: string): {
   anchor?: Anchor;
   mediaIds?: string[];
   mediaConfig?: Record<string, MediaConfig>;
+  author?: string;
 } {
   try {
     const obj = JSON.parse(decrypted) as Payload;
@@ -84,6 +88,7 @@ export function decodePayload(decrypted: string): {
         mediaIds: Array.isArray(obj.mediaIds) && obj.mediaIds.length ? obj.mediaIds : undefined,
         mediaConfig:
           obj.mediaConfig && typeof obj.mediaConfig === "object" ? obj.mediaConfig : undefined,
+        author: typeof obj.author === "string" ? obj.author : undefined,
       };
     }
   } catch {
@@ -253,6 +258,7 @@ export type SharedPiece = {
   id: string;
   text: string;
   mediaIds?: string[]; // photos, encrypted with the strand DEK (M2)
+  author?: string; // user id who wrote it (for edit/delete permissions)
   createdAt: number;
   updatedAt: number;
 };
