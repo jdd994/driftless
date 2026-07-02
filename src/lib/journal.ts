@@ -13,6 +13,8 @@ export type Anchor = {
   label?: string; // free-text era / reference, when there's no clear date
 };
 
+export type MediaConfig = { size?: "s" | "m" | "l"; tilt?: number };
+
 export type Entry = {
   id: string;
   text: string;
@@ -20,7 +22,16 @@ export type Entry = {
   updatedAt: number;
   anchor?: Anchor;
   mediaIds?: string[]; // attached images (stored encrypted in the media store)
+  mediaConfig?: Record<string, MediaConfig>; // per-photo size/tilt
 };
+
+// A gentle, stable default tilt derived from the media id, so polaroids look
+// scattered but don't jump around when reordered.
+export function defaultTilt(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return ((Math.abs(h) % 49) - 24) / 10; // ~[-2.4, 2.4] degrees
+}
 
 export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -37,12 +48,24 @@ export function hasAnchor(a: Anchor | undefined): a is Anchor {
 // the anchor travels inside the ciphertext (never plaintext). Legacy entries
 // were the raw text string; decodePayload detects that and treats it as text.
 
-type Payload = { __driftless: 1; text: string; anchor?: Anchor; mediaIds?: string[] };
+type Payload = {
+  __driftless: 1;
+  text: string;
+  anchor?: Anchor;
+  mediaIds?: string[];
+  mediaConfig?: Record<string, MediaConfig>;
+};
 
-export function encodePayload(text: string, anchor?: Anchor, mediaIds?: string[]): string {
+export function encodePayload(
+  text: string,
+  anchor?: Anchor,
+  mediaIds?: string[],
+  mediaConfig?: Record<string, MediaConfig>
+): string {
   const p: Payload = { __driftless: 1, text };
   if (hasAnchor(anchor)) p.anchor = anchor;
   if (mediaIds && mediaIds.length) p.mediaIds = mediaIds;
+  if (mediaConfig && Object.keys(mediaConfig).length) p.mediaConfig = mediaConfig;
   return JSON.stringify(p);
 }
 
@@ -50,6 +73,7 @@ export function decodePayload(decrypted: string): {
   text: string;
   anchor?: Anchor;
   mediaIds?: string[];
+  mediaConfig?: Record<string, MediaConfig>;
 } {
   try {
     const obj = JSON.parse(decrypted) as Payload;
@@ -58,6 +82,8 @@ export function decodePayload(decrypted: string): {
         text: obj.text,
         anchor: hasAnchor(obj.anchor) ? obj.anchor : undefined,
         mediaIds: Array.isArray(obj.mediaIds) && obj.mediaIds.length ? obj.mediaIds : undefined,
+        mediaConfig:
+          obj.mediaConfig && typeof obj.mediaConfig === "object" ? obj.mediaConfig : undefined,
       };
     }
   } catch {

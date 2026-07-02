@@ -300,6 +300,8 @@ export default function App() {
             onCreateStrandWith={handleCreateStrandWith}
             onAttachMedia={j.attachMedia}
             onRemoveMedia={j.removeMedia}
+
+            onSetMediaConfig={j.setMediaConfig}
             getMediaUrl={j.getMediaUrl}
           />
         </>
@@ -316,6 +318,8 @@ export default function App() {
           onCreateStrandWith={handleCreateStrandWith}
           onAttachMedia={j.attachMedia}
           onRemoveMedia={j.removeMedia}
+
+          onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
         />
       )}
@@ -338,6 +342,8 @@ export default function App() {
           onExport={handleExportStrand}
           onAttachMedia={j.attachMedia}
           onRemoveMedia={j.removeMedia}
+
+          onSetMediaConfig={j.setMediaConfig}
           getMediaUrl={j.getMediaUrl}
         />
       )}

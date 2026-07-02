@@ -2,7 +2,7 @@
 // The "lived time" lens: thoughts that have been given an anchor, arranged by
 // when they happened (not when they were written). Dated anchors group by year,
 // ascending; era-labelled anchors collect at the end as "unplaced".
-import { timelineGroups, type Entry, type Anchor, type Strand } from "../lib/journal";
+import { timelineGroups, type Entry, type Anchor, type Strand, type MediaConfig } from "../lib/journal";
 import { EntryItem } from "./EntryItem";
 
 type Props = {
@@ -15,6 +15,7 @@ type Props = {
   onCreateStrandWith: (title: string, entryId: string) => void;
   onAttachMedia: (entryId: string, file: File) => void;
   onRemoveMedia: (entryId: string, mediaId: string) => void;
+  onSetMediaConfig: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
 };
 
@@ -28,6 +29,7 @@ export function Timeline({
   onCreateStrandWith,
   onAttachMedia,
   onRemoveMedia,
+  onSetMediaConfig,
   getMediaUrl,
 }: Props) {
   const { dated, undated } = timelineGroups(entries);
@@ -67,6 +69,7 @@ export function Timeline({
               onCreateStrandWith={onCreateStrandWith}
               onAttachMedia={onAttachMedia}
               onRemoveMedia={onRemoveMedia}
+              onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
             />
           ))}
@@ -93,6 +96,7 @@ export function Timeline({
               onCreateStrandWith={onCreateStrandWith}
               onAttachMedia={onAttachMedia}
               onRemoveMedia={onRemoveMedia}
+              onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
             />
           ))}

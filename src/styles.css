@@ -479,7 +479,8 @@ kbd {
   margin-top: 12px;
   padding: 4px 2px;
 }
-/* Polaroids — warm paper frame, soft shadow, gently woven-in tilt. */
+/* Polaroids — warm paper frame, soft shadow. Tilt is per-photo (inline style),
+   so it's stable and adjustable. */
 .media-thumb {
   position: relative;
   display: inline-block;
@@ -487,15 +488,13 @@ kbd {
   padding: 8px 8px 24px;
   border-radius: 2px;
   box-shadow: 0 10px 22px -12px rgba(0, 0, 0, 0.75);
-  transform: rotate(-1.6deg);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-  max-width: 260px;
+  max-width: 240px;
 }
-.media-thumb:nth-child(even) { transform: rotate(1.6deg); }
-.media-thumb:hover {
-  transform: rotate(0deg);
-  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.8);
-}
+.media-thumb.size-s { max-width: 150px; }
+.media-thumb.size-m { max-width: 240px; }
+.media-thumb.size-l { max-width: 340px; }
+.media-thumb:hover { box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.85); }
 .media-thumb img {
   display: block;
   width: 100%;
@@ -504,6 +503,34 @@ kbd {
   object-fit: cover;
   border-radius: 1px;
 }
+/* size / tilt controls over the polaroid's bottom strip, on hover */
+.media-ctl {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.media-thumb:hover .media-ctl { opacity: 1; }
+.media-ctl-btn {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  color: #6b5e48;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 5px;
+  padding: 1px 5px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.media-ctl-btn.on { background: var(--amber); color: #201a10; border-color: transparent; }
+.media-ctl-sep { width: 6px; }
 .media-remove {
   position: absolute;
   top: 6px;

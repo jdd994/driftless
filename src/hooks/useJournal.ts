@@ -54,6 +54,7 @@ import {
   type Entry,
   type Anchor,
   type Strand,
+  type MediaConfig,
 } from "../lib/journal";
 import { buildBackup, type Backup } from "../lib/backup";
 
@@ -109,8 +110,8 @@ export function useJournal() {
     for (const s of stored) {
       if (s.deleted) continue; // tombstones aren't shown
       try {
-        const { text, anchor, mediaIds } = decodePayload(await decryptString(key, s.content));
-        decrypted.push({ id: s.id, text, anchor, mediaIds, createdAt: s.createdAt, updatedAt: s.updatedAt });
+        const { text, anchor, mediaIds, mediaConfig } = decodePayload(await decryptString(key, s.content));
+        decrypted.push({ id: s.id, text, anchor, mediaIds, mediaConfig, createdAt: s.createdAt, updatedAt: s.updatedAt });
       } catch {
         // Skip anything that won't decrypt rather than crash the whole list.
       }
@@ -274,7 +275,7 @@ export function useJournal() {
     if (!key) return;
     const content = await encryptString(
       key,
-      deleted ? "" : encodePayload(entry.text, entry.anchor, entry.mediaIds)
+      deleted ? "" : encodePayload(entry.text, entry.anchor, entry.mediaIds, entry.mediaConfig)
     );
     const record: StoredEntry = {
       id: entry.id,
@@ -408,6 +409,25 @@ export function useJournal() {
       if (updated) await guardedPersist(updated);
       await deleteMedia(mediaId);
       mediaUrls.current.delete(mediaId);
+    },
+    [guardedPersist]
+  );
+
+  // Adjust a photo's look (size / tilt) within a thought. Merges into the
+  // entry's per-photo config and persists.
+  const setMediaConfig = useCallback(
+    async (entryId: string, mediaId: string, partial: MediaConfig) => {
+      let updated: Entry | null = null;
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.id !== entryId) return e;
+          const cfg = { ...(e.mediaConfig ?? {}) };
+          cfg[mediaId] = { ...(cfg[mediaId] ?? {}), ...partial };
+          updated = { ...e, mediaConfig: cfg, updatedAt: Date.now() };
+          return updated;
+        })
+      );
+      if (updated) await guardedPersist(updated);
     },
     [guardedPersist]
   );
@@ -703,6 +723,7 @@ export function useJournal() {
     setAnchor,
     attachMedia,
     removeMedia,
+    setMediaConfig,
     getMediaUrl,
     strands,
     createStrand,

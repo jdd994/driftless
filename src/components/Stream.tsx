@@ -1,5 +1,5 @@
 // Stream.tsx
-import { groupByDay, type Entry, type Anchor, type Strand } from "../lib/journal";
+import { groupByDay, type Entry, type Anchor, type Strand, type MediaConfig } from "../lib/journal";
 import { EntryItem } from "./EntryItem";
 
 type Props = {
@@ -13,6 +13,7 @@ type Props = {
   onCreateStrandWith: (title: string, entryId: string) => void;
   onAttachMedia: (entryId: string, file: File) => void;
   onRemoveMedia: (entryId: string, mediaId: string) => void;
+  onSetMediaConfig: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
 };
 
@@ -29,6 +30,7 @@ export function Stream({
   onCreateStrandWith,
   onAttachMedia,
   onRemoveMedia,
+  onSetMediaConfig,
   getMediaUrl,
 }: Props) {
   if (totalCount === 0) {
@@ -79,6 +81,7 @@ export function Stream({
               onCreateStrandWith={onCreateStrandWith}
               onAttachMedia={onAttachMedia}
               onRemoveMedia={onRemoveMedia}
+              onSetMediaConfig={onSetMediaConfig}
               getMediaUrl={getMediaUrl}
             />
           ))}

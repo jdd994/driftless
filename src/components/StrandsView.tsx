@@ -3,7 +3,7 @@
 // pull in thoughts you've captured, write new pieces in place (each becomes an
 // ordinary thought too), arrange the order, and read the whole as one draft.
 import { useMemo, useRef, useState } from "react";
-import { strandEntries, type Entry, type Strand, type Anchor } from "../lib/journal";
+import { strandEntries, type Entry, type Strand, type Anchor, type MediaConfig } from "../lib/journal";
 import { EntryItem, MediaThumb } from "./EntryItem";
 
 type Props = {
@@ -23,6 +23,7 @@ type Props = {
   onExport: (strand: Strand, ordered: Entry[]) => void;
   onAttachMedia: (entryId: string, file: File) => void;
   onRemoveMedia: (entryId: string, mediaId: string) => void;
+  onSetMediaConfig: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl: (id: string) => Promise<string | null>;
 };
 
@@ -108,6 +109,7 @@ function StrandDetail({
   onExport,
   onAttachMedia,
   onRemoveMedia,
+  onSetMediaConfig,
   getMediaUrl,
 }: Props & { strand: Strand; byId: Map<string, Entry>; onBack: () => void }) {
   const [reading, setReading] = useState(false);
@@ -192,7 +194,12 @@ function StrandDetail({
                 {e.mediaIds && e.mediaIds.length > 0 && (
                   <div className="media-grid">
                     {e.mediaIds.map((mid) => (
-                      <MediaThumb key={mid} mediaId={mid} getUrl={getMediaUrl} />
+                      <MediaThumb
+                        key={mid}
+                        mediaId={mid}
+                        getUrl={getMediaUrl}
+                        config={e.mediaConfig?.[mid]}
+                      />
                     ))}
                   </div>
                 )}
@@ -233,6 +240,7 @@ function StrandDetail({
                 onAnchor={onAnchor}
                 onAttachMedia={onAttachMedia}
                 onRemoveMedia={onRemoveMedia}
+                onSetMediaConfig={onSetMediaConfig}
                 getMediaUrl={getMediaUrl}
               />
             </div>

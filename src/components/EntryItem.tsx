@@ -4,9 +4,11 @@ import {
   timeLabel,
   formatAnchor,
   parseAnchor,
+  defaultTilt,
   type Entry,
   type Anchor,
   type Strand,
+  type MediaConfig,
 } from "../lib/journal";
 
 type Props = {
@@ -23,6 +25,7 @@ type Props = {
   // Optional: photo attachments.
   onAttachMedia?: (entryId: string, file: File) => void;
   onRemoveMedia?: (entryId: string, mediaId: string) => void;
+  onSetMediaConfig?: (entryId: string, mediaId: string, partial: MediaConfig) => void;
   getMediaUrl?: (id: string) => Promise<string | null>;
 };
 
@@ -32,10 +35,14 @@ export function MediaThumb({
   mediaId,
   getUrl,
   onRemove,
+  config,
+  onConfig,
 }: {
   mediaId: string;
   getUrl: (id: string) => Promise<string | null>;
   onRemove?: () => void;
+  config?: MediaConfig;
+  onConfig?: (partial: MediaConfig) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
   const [gone, setGone] = useState(false);
@@ -53,13 +60,35 @@ export function MediaThumb({
 
   if (gone) return <div className="media-missing">Photo added on another device</div>;
   if (!url) return <div className="media-loading" />;
+
+  const size = config?.size ?? "m";
+  const tilt = config?.tilt ?? defaultTilt(mediaId);
+  const nudge = (delta: number) => onConfig?.({ tilt: Math.round((tilt + delta) * 10) / 10 });
+
   return (
-    <div className="media-thumb">
+    <div className={"media-thumb size-" + size} style={{ transform: `rotate(${tilt}deg)` }}>
       <img src={url} alt="" loading="lazy" />
       {onRemove && (
         <button className="media-remove" onClick={onRemove} title="Remove photo" aria-label="Remove photo">
           ✕
         </button>
+      )}
+      {onConfig && (
+        <div className="media-ctl">
+          {(["s", "m", "l"] as const).map((sz) => (
+            <button
+              key={sz}
+              className={"media-ctl-btn" + (size === sz ? " on" : "")}
+              onClick={() => onConfig({ size: sz })}
+            >
+              {sz.toUpperCase()}
+            </button>
+          ))}
+          <span className="media-ctl-sep" />
+          <button className="media-ctl-btn" onClick={() => nudge(-1.5)} title="Tilt left">↺</button>
+          <button className="media-ctl-btn" onClick={() => onConfig({ tilt: 0 })} title="Straighten">▯</button>
+          <button className="media-ctl-btn" onClick={() => nudge(1.5)} title="Tilt right">↻</button>
+        </div>
       )}
     </div>
   );
@@ -96,6 +125,7 @@ export function EntryItem({
   onCreateStrandWith,
   onAttachMedia,
   onRemoveMedia,
+  onSetMediaConfig,
   getMediaUrl,
 }: Props) {
   const [editing, setEditing] = useState(false);
@@ -205,6 +235,10 @@ export function EntryItem({
                   mediaId={mid}
                   getUrl={getMediaUrl}
                   onRemove={onRemoveMedia ? () => onRemoveMedia(entry.id, mid) : undefined}
+                  config={entry.mediaConfig?.[mid]}
+                  onConfig={
+                    onSetMediaConfig ? (partial) => onSetMediaConfig(entry.id, mid, partial) : undefined
+                  }
                 />
               ))}
             </div>
