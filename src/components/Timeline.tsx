@@ -13,6 +13,9 @@ type Props = {
   strands: Strand[];
   onToggleStrand: (strandId: string, entryId: string, add: boolean) => void;
   onCreateStrandWith: (title: string, entryId: string) => void;
+  onAttachMedia: (entryId: string, file: File) => void;
+  onRemoveMedia: (entryId: string, mediaId: string) => void;
+  getMediaUrl: (id: string) => Promise<string | null>;
 };
 
 export function Timeline({
@@ -23,6 +26,9 @@ export function Timeline({
   strands,
   onToggleStrand,
   onCreateStrandWith,
+  onAttachMedia,
+  onRemoveMedia,
+  getMediaUrl,
 }: Props) {
   const { dated, undated } = timelineGroups(entries);
 
@@ -59,6 +65,9 @@ export function Timeline({
               strands={strands}
               onToggleStrand={onToggleStrand}
               onCreateStrandWith={onCreateStrandWith}
+              onAttachMedia={onAttachMedia}
+              onRemoveMedia={onRemoveMedia}
+              getMediaUrl={getMediaUrl}
             />
           ))}
         </section>
@@ -82,6 +91,9 @@ export function Timeline({
               strands={strands}
               onToggleStrand={onToggleStrand}
               onCreateStrandWith={onCreateStrandWith}
+              onAttachMedia={onAttachMedia}
+              onRemoveMedia={onRemoveMedia}
+              getMediaUrl={getMediaUrl}
             />
           ))}
         </section>

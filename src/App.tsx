@@ -298,6 +298,9 @@ export default function App() {
             strands={j.strands}
             onToggleStrand={handleToggleStrand}
             onCreateStrandWith={handleCreateStrandWith}
+            onAttachMedia={j.attachMedia}
+            onRemoveMedia={j.removeMedia}
+            getMediaUrl={j.getMediaUrl}
           />
         </>
       )}
@@ -311,6 +314,9 @@ export default function App() {
           strands={j.strands}
           onToggleStrand={handleToggleStrand}
           onCreateStrandWith={handleCreateStrandWith}
+          onAttachMedia={j.attachMedia}
+          onRemoveMedia={j.removeMedia}
+          getMediaUrl={j.getMediaUrl}
         />
       )}
 
@@ -329,6 +335,9 @@ export default function App() {
           onDeleteEntry={handleDelete}
           onAnchor={j.setAnchor}
           onExport={handleExportStrand}
+          onAttachMedia={j.attachMedia}
+          onRemoveMedia={j.removeMedia}
+          getMediaUrl={j.getMediaUrl}
         />
       )}
 

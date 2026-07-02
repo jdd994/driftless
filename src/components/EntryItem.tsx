@@ -20,7 +20,50 @@ type Props = {
   strands?: Strand[];
   onToggleStrand?: (strandId: string, entryId: string, add: boolean) => void;
   onCreateStrandWith?: (title: string, entryId: string) => void;
+  // Optional: photo attachments.
+  onAttachMedia?: (entryId: string, file: File) => void;
+  onRemoveMedia?: (entryId: string, mediaId: string) => void;
+  getMediaUrl?: (id: string) => Promise<string | null>;
 };
+
+// One attached photo: decrypts to an in-memory URL on mount. Shows a gentle
+// note if the image lives on another device (media isn't synced yet).
+function MediaThumb({
+  mediaId,
+  getUrl,
+  onRemove,
+}: {
+  mediaId: string;
+  getUrl: (id: string) => Promise<string | null>;
+  onRemove?: () => void;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    getUrl(mediaId).then((u) => {
+      if (!alive) return;
+      if (u) setUrl(u);
+      else setGone(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [mediaId, getUrl]);
+
+  if (gone) return <div className="media-missing">Photo added on another device</div>;
+  if (!url) return <div className="media-loading" />;
+  return (
+    <div className="media-thumb">
+      <img src={url} alt="" loading="lazy" />
+      {onRemove && (
+        <button className="media-remove" onClick={onRemove} title="Remove photo" aria-label="Remove photo">
+          ✕
+        </button>
+      )}
+    </div>
+  );
+}
 
 // Render text with #tags tinted, safely (React escapes by default).
 function Body({ text }: { text: string }) {
@@ -51,6 +94,9 @@ export function EntryItem({
   strands,
   onToggleStrand,
   onCreateStrandWith,
+  onAttachMedia,
+  onRemoveMedia,
+  getMediaUrl,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(entry.text);
@@ -59,8 +105,10 @@ export function EntryItem({
   const [addingStrand, setAddingStrand] = useState(false);
   const [newStrand, setNewStrand] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
   const edited = entry.updatedAt !== entry.createdAt;
   const canStrand = strands && onToggleStrand && onCreateStrandWith;
+  const media = entry.mediaIds ?? [];
 
   // Grow the edit box to fit the whole thought (up to ~60vh, then scroll), so
   // editing shows full context instead of a few cramped lines.
@@ -149,6 +197,19 @@ export function EntryItem({
             <Body text={entry.text} />
           </div>
 
+          {media.length > 0 && getMediaUrl && (
+            <div className="media-grid">
+              {media.map((mid) => (
+                <MediaThumb
+                  key={mid}
+                  mediaId={mid}
+                  getUrl={getMediaUrl}
+                  onRemove={onRemoveMedia ? () => onRemoveMedia(entry.id, mid) : undefined}
+                />
+              ))}
+            </div>
+          )}
+
           {entry.anchor && !anchoring && !addingStrand && (
             <button className="anchor-chip" onClick={openAnchor} title="Edit when this happened">
               <span className="anchor-mark">⟡</span> {formatAnchor(entry.anchor)}
@@ -235,6 +296,24 @@ export function EntryItem({
                 <button className="act" onClick={() => setAddingStrand(true)}>
                   Add to strand
                 </button>
+              )}
+              {onAttachMedia && (
+                <>
+                  <button className="act" onClick={() => mediaInputRef.current?.click()}>
+                    Add photo
+                  </button>
+                  <input
+                    ref={mediaInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onAttachMedia(entry.id, f);
+                      e.target.value = "";
+                    }}
+                  />
+                </>
               )}
               <button className="act del" onClick={() => onDelete(entry.id)}>
                 Delete

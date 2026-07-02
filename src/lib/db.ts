@@ -14,7 +14,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { CipherBlob } from "./crypto";
 
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 export type VaultMeta = {
   id: "vault";
@@ -66,12 +66,26 @@ export type StoredStrand = {
   dirty: boolean;
 };
 
+// An attached image, stored as encrypted raw bytes (local-first — not synced
+// yet; that needs object storage, see SYNC_PLAN.md). `dirty`/`deleted` exist for
+// when media sync lands.
+export type StoredMedia = {
+  id: string;
+  type: string; // mime, e.g. image/jpeg
+  createdAt: number;
+  iv: Uint8Array;
+  data: ArrayBuffer; // ciphertext
+  deleted: boolean;
+  dirty: boolean;
+};
+
 interface DriftlessDB extends DBSchema {
   vault: { key: string; value: VaultMeta };
   entries: { key: string; value: StoredEntry; indexes: { byCreated: number } };
   sync: { key: string; value: SyncState };
   device: { key: string; value: DeviceEnrollment };
   strands: { key: string; value: StoredStrand };
+  media: { key: string; value: StoredMedia };
 }
 
 let dbPromise: Promise<IDBPDatabase<DriftlessDB>> | null = null;
@@ -110,6 +124,10 @@ function db() {
         // v4: strands (named, ordered collections).
         if (oldVersion < 4) {
           database.createObjectStore("strands", { keyPath: "id" });
+        }
+        // v5: media (encrypted image bytes, local-first).
+        if (oldVersion < 5) {
+          database.createObjectStore("media", { keyPath: "id" });
         }
       },
     });
@@ -189,6 +207,16 @@ export async function markAllDirty(): Promise<void> {
   const d = await db();
   for (const e of await d.getAll("entries")) if (!e.dirty) await d.put("entries", { ...e, dirty: true });
   for (const s of await d.getAll("strands")) if (!s.dirty) await d.put("strands", { ...s, dirty: true });
+}
+
+export async function putMedia(media: StoredMedia): Promise<void> {
+  await (await db()).put("media", media);
+}
+export async function getMedia(id: string): Promise<StoredMedia | undefined> {
+  return (await db()).get("media", id);
+}
+export async function deleteMedia(id: string): Promise<void> {
+  await (await db()).delete("media", id);
 }
 
 export async function getDevice(): Promise<DeviceEnrollment | undefined> {

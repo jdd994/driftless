@@ -11,6 +11,9 @@ type Props = {
   strands: Strand[];
   onToggleStrand: (strandId: string, entryId: string, add: boolean) => void;
   onCreateStrandWith: (title: string, entryId: string) => void;
+  onAttachMedia: (entryId: string, file: File) => void;
+  onRemoveMedia: (entryId: string, mediaId: string) => void;
+  getMediaUrl: (id: string) => Promise<string | null>;
 };
 
 const RECENT_WINDOW = 1000 * 60 * 60 * 6; // glow ticks from the last 6 hours
@@ -24,6 +27,9 @@ export function Stream({
   strands,
   onToggleStrand,
   onCreateStrandWith,
+  onAttachMedia,
+  onRemoveMedia,
+  getMediaUrl,
 }: Props) {
   if (totalCount === 0) {
     return (
@@ -71,6 +77,9 @@ export function Stream({
               strands={strands}
               onToggleStrand={onToggleStrand}
               onCreateStrandWith={onCreateStrandWith}
+              onAttachMedia={onAttachMedia}
+              onRemoveMedia={onRemoveMedia}
+              getMediaUrl={getMediaUrl}
             />
           ))}
         </section>

@@ -19,6 +19,7 @@ export type Entry = {
   createdAt: number;
   updatedAt: number;
   anchor?: Anchor;
+  mediaIds?: string[]; // attached images (stored encrypted in the media store)
 };
 
 export function uid(): string {
@@ -36,19 +37,28 @@ export function hasAnchor(a: Anchor | undefined): a is Anchor {
 // the anchor travels inside the ciphertext (never plaintext). Legacy entries
 // were the raw text string; decodePayload detects that and treats it as text.
 
-type Payload = { __driftless: 1; text: string; anchor?: Anchor };
+type Payload = { __driftless: 1; text: string; anchor?: Anchor; mediaIds?: string[] };
 
-export function encodePayload(text: string, anchor?: Anchor): string {
+export function encodePayload(text: string, anchor?: Anchor, mediaIds?: string[]): string {
   const p: Payload = { __driftless: 1, text };
   if (hasAnchor(anchor)) p.anchor = anchor;
+  if (mediaIds && mediaIds.length) p.mediaIds = mediaIds;
   return JSON.stringify(p);
 }
 
-export function decodePayload(decrypted: string): { text: string; anchor?: Anchor } {
+export function decodePayload(decrypted: string): {
+  text: string;
+  anchor?: Anchor;
+  mediaIds?: string[];
+} {
   try {
     const obj = JSON.parse(decrypted) as Payload;
     if (obj && typeof obj === "object" && obj.__driftless === 1 && typeof obj.text === "string") {
-      return { text: obj.text, anchor: hasAnchor(obj.anchor) ? obj.anchor : undefined };
+      return {
+        text: obj.text,
+        anchor: hasAnchor(obj.anchor) ? obj.anchor : undefined,
+        mediaIds: Array.isArray(obj.mediaIds) && obj.mediaIds.length ? obj.mediaIds : undefined,
+      };
     }
   } catch {
     // Not our JSON → a legacy plain-text entry.

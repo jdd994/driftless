@@ -9,11 +9,14 @@ import {
   checkVerifier,
   encryptString,
   decryptString,
+  encryptBytes,
+  decryptBytes,
   newSalt,
   exportKeyRaw,
   importKeyRaw,
   PBKDF2_ITERATIONS,
 } from "../lib/crypto";
+import { compressImage } from "../lib/media";
 import {
   biometricSupported,
   enrollBiometric,
@@ -26,6 +29,9 @@ import {
   putStoredEntry,
   allStoredStrands,
   putStoredStrand,
+  putMedia,
+  getMedia,
+  deleteMedia,
   importData,
   getDevice,
   saveDevice,
@@ -67,6 +73,7 @@ export function useJournal() {
   const tokenRef = useRef<string | null>(null); // sync auth token (NOT the key)
   const syncingRef = useRef(false);
   const syncTimer = useRef<number | null>(null);
+  const mediaUrls = useRef<Map<string, string>>(new Map()); // mediaId → object URL (decrypted, in-memory)
 
   // Decide on first paint whether we need setup or unlock.
   useEffect(() => {
@@ -102,8 +109,8 @@ export function useJournal() {
     for (const s of stored) {
       if (s.deleted) continue; // tombstones aren't shown
       try {
-        const { text, anchor } = decodePayload(await decryptString(key, s.content));
-        decrypted.push({ id: s.id, text, anchor, createdAt: s.createdAt, updatedAt: s.updatedAt });
+        const { text, anchor, mediaIds } = decodePayload(await decryptString(key, s.content));
+        decrypted.push({ id: s.id, text, anchor, mediaIds, createdAt: s.createdAt, updatedAt: s.updatedAt });
       } catch {
         // Skip anything that won't decrypt rather than crash the whole list.
       }
@@ -254,6 +261,8 @@ export function useJournal() {
     keyRef.current = null;
     setEntries([]);
     setStrands([]);
+    mediaUrls.current.forEach((u) => URL.revokeObjectURL(u));
+    mediaUrls.current.clear();
     setVaultState("locked");
   }, []);
 
@@ -266,7 +275,7 @@ export function useJournal() {
     if (!key) return;
     const content = await encryptString(
       key,
-      deleted ? "" : encodePayload(entry.text, entry.anchor)
+      deleted ? "" : encodePayload(entry.text, entry.anchor, entry.mediaIds)
     );
     const record: StoredEntry = {
       id: entry.id,
@@ -350,6 +359,82 @@ export function useJournal() {
     },
     [guardedPersist]
   );
+
+  // Attach a photo to a thought: compress → encrypt → store locally, then add
+  // its id to the entry. Local-first — the image bytes aren't synced yet (only
+  // the reference in the entry payload is).
+  const attachMedia = useCallback(
+    async (entryId: string, file: File) => {
+      const key = keyRef.current;
+      if (!key) return;
+      const { bytes, type } = await compressImage(file);
+      const cb = await encryptBytes(key, bytes);
+      const mediaId = uid();
+      await putMedia({
+        id: mediaId,
+        type,
+        createdAt: Date.now(),
+        iv: cb.iv,
+        data: cb.data,
+        deleted: false,
+        dirty: true,
+      });
+      let updated: Entry | null = null;
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.id !== entryId) return e;
+          updated = { ...e, mediaIds: [...(e.mediaIds ?? []), mediaId], updatedAt: Date.now() };
+          return updated;
+        })
+      );
+      if (updated) await guardedPersist(updated);
+    },
+    [guardedPersist]
+  );
+
+  const removeMedia = useCallback(
+    async (entryId: string, mediaId: string) => {
+      let updated: Entry | null = null;
+      setEntries((prev) =>
+        prev.map((e) => {
+          if (e.id !== entryId) return e;
+          updated = {
+            ...e,
+            mediaIds: (e.mediaIds ?? []).filter((m) => m !== mediaId),
+            updatedAt: Date.now(),
+          };
+          return updated;
+        })
+      );
+      if (updated) await guardedPersist(updated);
+      await deleteMedia(mediaId);
+      const url = mediaUrls.current.get(mediaId);
+      if (url) {
+        URL.revokeObjectURL(url);
+        mediaUrls.current.delete(mediaId);
+      }
+    },
+    [guardedPersist]
+  );
+
+  // Decrypt a stored image to an in-memory object URL (cached). Returns null if
+  // the media isn't on this device (e.g. added on another device — not synced).
+  const getMediaUrl = useCallback(async (id: string): Promise<string | null> => {
+    const cached = mediaUrls.current.get(id);
+    if (cached) return cached;
+    const key = keyRef.current;
+    if (!key) return null;
+    const m = await getMedia(id);
+    if (!m || m.deleted) return null;
+    try {
+      const bytes = await decryptBytes(key, { iv: m.iv, data: m.data });
+      const url = URL.createObjectURL(new Blob([bytes], { type: m.type }));
+      mediaUrls.current.set(id, url);
+      return url;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const removeEntry = useCallback(
     async (entry: Entry) => {
@@ -608,6 +693,9 @@ export function useJournal() {
     removeEntry,
     restoreEntry,
     setAnchor,
+    attachMedia,
+    removeMedia,
+    getMediaUrl,
     strands,
     createStrand,
     renameStrand,

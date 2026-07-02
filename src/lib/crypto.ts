@@ -144,6 +144,21 @@ export async function unwrapWithSecret(
   return Array.from(new Uint8Array(raw));
 }
 
+// ---- Binary encryption (media / images) --------------------------------
+// Images are raw bytes, stored directly in IndexedDB (which holds ArrayBuffers
+// efficiently) rather than the number[] shape used for small text blobs.
+export type CipherBytes = { iv: Uint8Array; data: ArrayBuffer };
+
+export async function encryptBytes(key: CryptoKey, bytes: ArrayBuffer): Promise<CipherBytes> {
+  const iv = randomBytes(12);
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv: toBuf(iv) }, key, bytes);
+  return { iv, data };
+}
+
+export async function decryptBytes(key: CryptoKey, blob: CipherBytes): Promise<ArrayBuffer> {
+  return crypto.subtle.decrypt({ name: "AES-GCM", iv: toBuf(blob.iv) }, key, blob.data);
+}
+
 // A small known token, encrypted at setup. On unlock we try to decrypt it;
 // success means the passphrase was correct. AES-GCM fails loudly on a wrong
 // key, so this never produces a false positive.

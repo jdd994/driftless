@@ -20,6 +20,9 @@ type Props = {
   onDeleteEntry: (id: string) => void;
   onAnchor: (id: string, anchor: Anchor | null) => void;
   onExport: (strand: Strand, ordered: Entry[]) => void;
+  onAttachMedia: (entryId: string, file: File) => void;
+  onRemoveMedia: (entryId: string, mediaId: string) => void;
+  getMediaUrl: (id: string) => Promise<string | null>;
 };
 
 export function StrandsView(props: Props) {
@@ -101,6 +104,9 @@ function StrandDetail({
   onDeleteEntry,
   onAnchor,
   onExport,
+  onAttachMedia,
+  onRemoveMedia,
+  getMediaUrl,
 }: Props & { strand: Strand; byId: Map<string, Entry>; onBack: () => void }) {
   const [reading, setReading] = useState(false);
   const [titleDraft, setTitleDraft] = useState(strand.title);
@@ -211,6 +217,9 @@ function StrandDetail({
                 onSave={onSaveEntry}
                 onDelete={onDeleteEntry}
                 onAnchor={onAnchor}
+                onAttachMedia={onAttachMedia}
+                onRemoveMedia={onRemoveMedia}
+                getMediaUrl={getMediaUrl}
               />
             </div>
           ))}
