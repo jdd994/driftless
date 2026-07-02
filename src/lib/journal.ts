@@ -13,7 +13,7 @@ export type Anchor = {
   label?: string; // free-text era / reference, when there's no clear date
 };
 
-export type MediaConfig = { size?: "s" | "m" | "l"; tilt?: number };
+export type MediaConfig = { size?: "s" | "m" | "l"; width?: number; tilt?: number };
 
 export type Entry = {
   id: string;

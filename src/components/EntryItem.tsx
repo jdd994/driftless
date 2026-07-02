@@ -1,5 +1,5 @@
 // EntryItem.tsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   timeLabel,
   formatAnchor,
@@ -58,15 +58,39 @@ export function MediaThumb({
     };
   }, [mediaId, getUrl]);
 
+  const PRESET = { s: 150, m: 240, l: 340 } as const;
+  const baseWidth = config?.width ?? (config?.size ? PRESET[config.size] : 240);
+  const tilt = config?.tilt ?? defaultTilt(mediaId);
+  const [dragW, setDragW] = useState<number | null>(null);
+  const dragRef = useRef<{ x: number; w: number } | null>(null);
+  const width = dragW ?? baseWidth;
+  const nudge = (delta: number) => onConfig?.({ tilt: Math.round((tilt + delta) * 10) / 10 });
+
+  function onResizeDown(e: ReactPointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = { x: e.clientX, w: width };
+    setDragW(width);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+  function onResizeMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return;
+    setDragW(Math.max(90, Math.min(680, dragRef.current.w + (e.clientX - dragRef.current.x))));
+  }
+  function onResizeUp() {
+    if (dragRef.current && dragW != null) onConfig?.({ width: Math.round(dragW) });
+    dragRef.current = null;
+    setDragW(null);
+  }
+
   if (gone) return <div className="media-missing">Photo added on another device</div>;
   if (!url) return <div className="media-loading" />;
 
-  const size = config?.size ?? "m";
-  const tilt = config?.tilt ?? defaultTilt(mediaId);
-  const nudge = (delta: number) => onConfig?.({ tilt: Math.round((tilt + delta) * 10) / 10 });
-
   return (
-    <div className={"media-thumb size-" + size} style={{ transform: `rotate(${tilt}deg)` }}>
+    <div
+      className="media-thumb"
+      style={{ transform: `rotate(${tilt}deg)`, width: `${width}px`, maxWidth: "100%" }}
+    >
       <img src={url} alt="" loading="lazy" />
       {onRemove && (
         <button className="media-remove" onClick={onRemove} title="Remove photo" aria-label="Remove photo">
@@ -74,21 +98,32 @@ export function MediaThumb({
         </button>
       )}
       {onConfig && (
-        <div className="media-ctl">
-          {(["s", "m", "l"] as const).map((sz) => (
-            <button
-              key={sz}
-              className={"media-ctl-btn" + (size === sz ? " on" : "")}
-              onClick={() => onConfig({ size: sz })}
-            >
-              {sz.toUpperCase()}
-            </button>
-          ))}
-          <span className="media-ctl-sep" />
-          <button className="media-ctl-btn" onClick={() => nudge(-1.5)} title="Tilt left">↺</button>
-          <button className="media-ctl-btn" onClick={() => onConfig({ tilt: 0 })} title="Straighten">▯</button>
-          <button className="media-ctl-btn" onClick={() => nudge(1.5)} title="Tilt right">↻</button>
-        </div>
+        <>
+          <div className="media-ctl">
+            {(["s", "m", "l"] as const).map((sz) => (
+              <button
+                key={sz}
+                className={"media-ctl-btn" + (Math.abs(width - PRESET[sz]) < 8 ? " on" : "")}
+                onClick={() => onConfig({ width: PRESET[sz] })}
+              >
+                {sz.toUpperCase()}
+              </button>
+            ))}
+            <span className="media-ctl-sep" />
+            <button className="media-ctl-btn" onClick={() => nudge(-1.5)} title="Tilt left">↺</button>
+            <button className="media-ctl-btn" onClick={() => onConfig({ tilt: 0 })} title="Straighten">▯</button>
+            <button className="media-ctl-btn" onClick={() => nudge(1.5)} title="Tilt right">↻</button>
+          </div>
+          <div
+            className="media-resize"
+            onPointerDown={onResizeDown}
+            onPointerMove={onResizeMove}
+            onPointerUp={onResizeUp}
+            onPointerCancel={onResizeUp}
+            title="Drag to resize"
+            aria-hidden="true"
+          />
+        </>
       )}
     </div>
   );
