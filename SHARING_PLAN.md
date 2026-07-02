@@ -1,7 +1,7 @@
 # Sharing plan — connected & family strands
 
-Status: **S1 + S2 + S3 done (client flow proven end-to-end); S4 (family strands
-+ membership UI) next.** The sharing chapter — co-authored,
+Status: **S1–S4 done (family strands + rotation proven end-to-end); S5 (social
+recovery) is the remaining frontier.** The sharing chapter — co-authored,
 end-to-end-encrypted strands shared with people you love. It builds on the sync
 engine (done; see SYNC_PLAN.md) and is the most security-critical work in the
 app. Design it fully before building; build it foundation-first; test each slice
@@ -140,9 +140,20 @@ gives forward secrecy for *future* content.
    co-author, order preserved). Still worth a real 2-person device test.
    *v1 scope:* text pieces only; no reorder/delete/media in shared yet; leave/
    remove/rotation is S4.
-4. **S4 — Family strands (N members) + membership UI.** Multiple invites, member
-   list, leave/remove with DEK rotation. (Server endpoints already exist from
-   S2; this is client UI + the rotation flow.)
+4. ✅ **S4 — Family strands (N members) + membership UI.** Invite many (repeat
+   invite), a **People** panel (member list + roles), **Leave** (member) and
+   **Remove** (owner). Removal triggers **client-driven DEK rotation**: mint a
+   new DEK at the next epoch, **re-encrypt the meta + every piece under it**, and
+   re-wrap it to the remaining members (via the UPSERT `invite`). Remaining
+   members detect the epoch bump on their next load, re-unwrap, and rebuild from
+   scratch (cursor reset). The removed member is 403'd, dropped from `/mine`, and
+   their old DEK decrypts nothing on the server. No server changes were needed —
+   all S2 endpoints. **Done & deployed; verified 13/13** (3-member strand,
+   co-author, remove+rotate, old-key lockout, transparent rebuild, leave).
+   *Chose re-encryption over multi-epoch key history:* one active DEK at a time,
+   no schema change, same forward-secrecy property (family strands are small, so
+   re-encrypting all pieces on the rare removal is cheap). *Deferred:* ownership
+   transfer (owner can't leave yet); reorder/delete of shared pieces.
 5. **S5 — Social recovery.** The family together restores a member who lost their
    passphrase — K-of-N Shamir secret sharing of a recovery secret, each share
    wrapped to a member's public key; the server holds no usable share. The

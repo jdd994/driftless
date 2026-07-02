@@ -184,3 +184,17 @@ export function sharedPull(
 ): Promise<{ changes: SharedRecord[]; cursor: number; more: boolean }> {
   return req(`/shared/${strandId}/pull?since=${since}`, { token });
 }
+
+// Leave a strand you're a member of (self-removal).
+export function sharedLeave(token: string, strandId: string): Promise<{ ok: boolean }> {
+  return req(`/shared/${strandId}/leave`, { method: "POST", token });
+}
+
+// Owner removes a member. Rotation (re-key) is driven client-side afterwards.
+export function sharedRemove(
+  token: string,
+  strandId: string,
+  userId: string
+): Promise<{ ok: boolean }> {
+  return req(`/shared/${strandId}/remove`, { method: "POST", token, body: { userId } });
+}

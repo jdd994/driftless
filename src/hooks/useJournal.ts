@@ -62,7 +62,11 @@ import {
   sharedMine,
   sharedPush,
   sharedPull,
+  sharedMembers,
+  sharedLeave,
+  sharedRemove,
   type SharedRecord,
+  type StrandMember,
 } from "../lib/api";
 import { syncNow } from "../lib/sync";
 import {
@@ -302,6 +306,17 @@ export function useJournal() {
             pieces: {},
           };
           sharedRef.current.set(s.strandId, live);
+        } else if (live.dekEpoch !== s.dekEpoch) {
+          // The strand was re-keyed (a member was removed). Unwrap the new DEK
+          // and rebuild from scratch — every piece was re-encrypted under it.
+          try {
+            live.dek = await unwrapDEK(kp.privateKey, s.ephemeralPub, s.wrappedDEK);
+          } catch {
+            continue;
+          }
+          live.dekEpoch = s.dekEpoch;
+          live.cursor = 0;
+          live.pieces = {};
         }
         await pullSharedStrand(live);
       }
@@ -907,6 +922,105 @@ export function useJournal() {
     [publishShared]
   );
 
+  // Who's in a shared strand (name + role), for the members panel.
+  const fetchStrandMembers = useCallback(async (strandId: string): Promise<StrandMember[]> => {
+    const token = tokenRef.current;
+    if (!token) return [];
+    try {
+      const { members } = await sharedMembers(token, strandId);
+      return members;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Re-key a strand: mint a fresh DEK, re-encrypt the meta + every piece under
+  // it at the next epoch, and re-wrap that DEK to each remaining member. A
+  // removed member holds only the old DEK — which now decrypts nothing on the
+  // server — so future (and re-encrypted) content stays out of reach. Remaining
+  // members detect the epoch bump on their next load and rebuild transparently.
+  const rotateDEK = useCallback(async (live: LiveShared) => {
+    const token = tokenRef.current;
+    if (!token) return;
+    const newDek = await generateDEK();
+    const newEpoch = live.dekEpoch + 1;
+    const t = Date.now();
+    const changes: SharedRecord[] = [
+      {
+        kind: "meta",
+        id: "meta",
+        createdAt: t,
+        updatedAt: t,
+        deleted: false,
+        dekEpoch: newEpoch,
+        content: await encryptString(newDek, encodeStrand(live.title, live.entryIds)),
+      },
+    ];
+    for (const pid of Object.keys(live.pieces)) {
+      const p = live.pieces[pid];
+      changes.push({
+        kind: "piece",
+        id: pid,
+        createdAt: p.createdAt,
+        updatedAt: t,
+        deleted: false,
+        dekEpoch: newEpoch,
+        content: await encryptString(newDek, encodePayload(p.text)),
+      });
+    }
+    // Push in bounded batches (server caps a push; family strands are small).
+    let cursor = live.cursor;
+    for (let i = 0; i < changes.length; i += 400) {
+      const res = await sharedPush(token, live.strandId, changes.slice(i, i + 400));
+      cursor = res.cursor;
+    }
+    // Re-wrap the new DEK to everyone still in the strand (including ourselves).
+    const { members } = await sharedMembers(token, live.strandId);
+    for (const m of members) {
+      if (!m.identityPublicKey) continue;
+      const { ephemeralPub, wrappedDEK } = await wrapDEKForRecipient(m.identityPublicKey, newDek);
+      await inviteToStrand(token, live.strandId, m.email, ephemeralPub, wrappedDEK, newEpoch);
+    }
+    live.dek = newDek;
+    live.dekEpoch = newEpoch;
+    live.cursor = cursor;
+  }, []);
+
+  // Owner removes a member, then re-keys so they can't read anything new.
+  const removeSharedMember = useCallback(
+    async (strandId: string, userId: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      const live = sharedRef.current.get(strandId);
+      if (!token || !live) return "This strand isn't ready.";
+      try {
+        await sharedRemove(token, strandId, userId);
+        await rotateDEK(live);
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't remove that member.";
+      }
+    },
+    [rotateDEK, publishShared]
+  );
+
+  // Leave a strand shared with you. Local copy is dropped immediately.
+  const leaveSharedStrand = useCallback(
+    async (strandId: string): Promise<string | null> => {
+      const token = tokenRef.current;
+      if (!token) return "Not connected.";
+      try {
+        await sharedLeave(token, strandId);
+        sharedRef.current.delete(strandId);
+        publishShared();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't leave that strand.";
+      }
+    },
+    [publishShared]
+  );
+
   // ---- Sync account (opt-in) --------------------------------------------
 
   // Create a sync account from THIS device's existing vault, then upload
@@ -1024,6 +1138,9 @@ export function useJournal() {
     createSharedStrand,
     inviteToSharedStrand,
     writeInSharedStrand,
+    fetchStrandMembers,
+    removeSharedMember,
+    leaveSharedStrand,
     refreshShared: loadSharedStrands,
   };
 }

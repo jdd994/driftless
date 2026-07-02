@@ -5,6 +5,7 @@
 // same strand, and it's there when either of you visits. No pings, no badges.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SharedStrandView } from "../lib/journal";
+import type { StrandMember } from "../lib/api";
 
 type Props = {
   sharedStrands: SharedStrandView[];
@@ -12,6 +13,9 @@ type Props = {
   onCreate: (title: string) => Promise<string | null>;
   onInvite: (strandId: string, email: string) => Promise<string | null>;
   onWrite: (strandId: string, text: string) => Promise<string | null>;
+  onMembers: (strandId: string) => Promise<StrandMember[]>;
+  onRemoveMember: (strandId: string, userId: string) => Promise<string | null>;
+  onLeave: (strandId: string) => Promise<string | null>;
   onRefresh: () => void;
 };
 
@@ -68,6 +72,13 @@ export function SharedView(props: Props) {
         onBack={() => setSelectedId(null)}
         onInvite={props.onInvite}
         onWrite={props.onWrite}
+        onMembers={props.onMembers}
+        onRemoveMember={props.onRemoveMember}
+        onLeave={async (id) => {
+          const err = await props.onLeave(id);
+          if (!err) setSelectedId(null);
+          return err;
+        }}
       />
     );
   }
@@ -128,12 +139,19 @@ function SharedDetail({
   onBack,
   onInvite,
   onWrite,
+  onMembers,
+  onRemoveMember,
+  onLeave,
 }: {
   strand: SharedStrandView;
   onBack: () => void;
   onInvite: (strandId: string, email: string) => Promise<string | null>;
   onWrite: (strandId: string, text: string) => Promise<string | null>;
+  onMembers: (strandId: string) => Promise<StrandMember[]>;
+  onRemoveMember: (strandId: string, userId: string) => Promise<string | null>;
+  onLeave: (strandId: string) => Promise<string | null>;
 }) {
+  const isOwner = strand.role === "owner";
   const [compose, setCompose] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -141,7 +159,48 @@ function SharedDetail({
   const [email, setEmail] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteNote, setInviteNote] = useState<string | null>(null);
+  const [showMembers, setShowMembers] = useState(false);
+  const [members, setMembers] = useState<StrandMember[] | null>(null);
+  const [memberBusy, setMemberBusy] = useState(false);
+  const [memberNote, setMemberNote] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  async function loadMembers() {
+    setMembers(await onMembers(strand.strandId));
+  }
+
+  async function toggleMembers() {
+    const next = !showMembers;
+    setShowMembers(next);
+    if (next && members === null) await loadMembers();
+  }
+
+  async function remove(m: StrandMember) {
+    if (
+      !confirm(
+        `Remove ${m.email}? The strand will be re-keyed so they can't read anything added afterwards. This can take a moment.`
+      )
+    )
+      return;
+    setMemberBusy(true);
+    setMemberNote(null);
+    const err = await onRemoveMember(strand.strandId, m.userId);
+    setMemberBusy(false);
+    if (err) {
+      setMemberNote(err);
+      return;
+    }
+    await loadMembers();
+  }
+
+  async function leave() {
+    if (!confirm("Leave this strand? You'll no longer see it or its updates.")) return;
+    setMemberBusy(true);
+    setMemberNote(null);
+    const err = await onLeave(strand.strandId);
+    setMemberBusy(false);
+    if (err) setMemberNote(err);
+  }
 
   const ordered = useMemo(
     () => strand.entryIds.map((id) => strand.pieces[id]).filter(Boolean),
@@ -184,6 +243,9 @@ function SharedDetail({
           ‹ Shared
         </button>
         <div className="strand-top-actions">
+          <button className="ghost-btn" onClick={toggleMembers}>
+            {showMembers ? "Close" : "People"}
+          </button>
           <button className="ghost-btn" onClick={() => setInviting((v) => !v)}>
             {inviting ? "Close" : "Invite"}
           </button>
@@ -191,6 +253,40 @@ function SharedDetail({
       </div>
 
       <h2 className="strand-title">{strand.title || "Untitled"}</h2>
+
+      {showMembers && (
+        <div className="share-invite">
+          {members === null ? (
+            <p className="share-hint">Loading…</p>
+          ) : (
+            <ul className="member-list">
+              {members.map((m) => (
+                <li key={m.userId} className="member-row">
+                  <span className="member-email">{m.email}</span>
+                  <span className="member-role">{m.role === "owner" ? "owner" : "member"}</span>
+                  {isOwner && m.role !== "owner" && (
+                    <button className="act member-remove" disabled={memberBusy} onClick={() => remove(m)}>
+                      {memberBusy ? "…" : "Remove"}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!isOwner && (
+            <button className="ghost-btn" disabled={memberBusy} onClick={leave}>
+              Leave this strand
+            </button>
+          )}
+          {memberNote && <p className="share-error">{memberNote}</p>}
+          {isOwner && (
+            <p className="share-hint">
+              Removing someone re-keys the strand, so they can't read anything added
+              afterward. What they've already seen, they've seen.
+            </p>
+          )}
+        </div>
+      )}
 
       {inviting && (
         <div className="share-invite">
