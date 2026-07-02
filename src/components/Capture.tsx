@@ -3,6 +3,22 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = { onKeep: (text: string) => void };
 
+// Gentle invitations shown in the empty capture box — a soft nudge toward
+// noticing and reflecting, never a demand. A mix of open-ended and warm so the
+// space still welcomes the hard days; you ignore it just by starting to type.
+// One is picked at random each time the app opens.
+const PROMPTS = [
+  "What's surfacing? Catch it here…",
+  "What's on your mind?",
+  "How are you, really?",
+  "What's one small good thing right now?",
+  "Who are you grateful for today?",
+  "What do you want to remember about today?",
+  "What's taking up space in your head?",
+  "Name something, however small, that felt good.",
+  "What matters to you this evening?",
+];
+
 const isMac =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -10,6 +26,7 @@ export function Capture({ onKeep }: Props) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState("");
   const [flash, setFlash] = useState(false);
+  const [prompt] = useState(() => PROMPTS[Math.floor(Math.random() * PROMPTS.length)]);
 
   useEffect(() => {
     ref.current?.focus();
@@ -42,7 +59,7 @@ export function Capture({ onKeep }: Props) {
         className="capture-input"
         rows={1}
         aria-label="Write a thought"
-        placeholder="What's surfacing? Catch it here…"
+        placeholder={prompt}
         value={value}
         onChange={(e) => {
           setValue(e.target.value);

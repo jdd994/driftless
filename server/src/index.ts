@@ -39,6 +39,26 @@ async function requireAuth(c: AppContext, next: Next) {
 
 app.get("/health", (c) => c.json({ ok: true, service: "driftless-server" }));
 
+// A calm "note to the maker". Open (no account needed) so even a first-time
+// visitor can send a word. Stored separately from journal data; it's a plain
+// message, never touching any ciphertext. Optional token just attributes it.
+app.post("/feedback", async (c) => {
+  const b = await c.req.json().catch(() => null);
+  const message = (b?.message ?? "").toString().trim();
+  if (!message) return c.json({ error: "Say a little something first." }, 400);
+  if (message.length > 4000) return c.json({ error: "That's a bit long — trim it a touch." }, 400);
+  const contact = (b?.contact ?? "").toString().trim().slice(0, 200) || null;
+  const header = c.req.header("Authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const userId = token ? await verifyToken(token, c.env.TOKEN_SECRET) : null;
+  await c.env.DB.prepare(
+    "INSERT INTO feedback (id, created_at, message, contact, user_id) VALUES (?, ?, ?, ?, ?)"
+  )
+    .bind(crypto.randomUUID(), Date.now(), message.slice(0, 4000), contact, userId)
+    .run();
+  return c.json({ ok: true });
+});
+
 // ---- Sync (Phase 3) ------------------------------------------------------
 // The server stores each entry's ciphertext + metadata and assigns a per-user
 // monotonic `seq`. Push upserts with last-write-wins by updatedAt; pull returns

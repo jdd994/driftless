@@ -75,3 +75,15 @@ CREATE TABLE IF NOT EXISTS shared_objects (
   PRIMARY KEY (strand_id, id)
 );
 CREATE INDEX IF NOT EXISTS shared_objects_by_seq ON shared_objects(strand_id, seq);
+
+-- ---- Feedback ------------------------------------------------------------
+-- A calm "note to the maker" box in the app. NOT part of the journal and NOT
+-- end-to-end encrypted — it's a plain message the writer chose to send. Kept
+-- separate from everything above so it can never touch journal ciphertext.
+CREATE TABLE IF NOT EXISTS feedback (
+  id         TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  message    TEXT NOT NULL,
+  contact    TEXT,                    -- optional, if they want a reply
+  user_id    TEXT                     -- set only if they happened to be signed in
+);

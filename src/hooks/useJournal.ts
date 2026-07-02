@@ -362,26 +362,73 @@ export function useJournal() {
     };
   }, [vaultState, runSync, ensureIdentity, loadSharedStrands]);
 
-  // First run: choose a passphrase, create the vault.
+  // Create a sync account from THIS device's existing vault, then upload
+  // everything. Requires the vault key in memory. Returns an error message, or
+  // null on success. Generates the identity keypair (for sharing) and uploads
+  // the public half + the vault-wrapped private half.
+  const connectCreateAccount = useCallback(
+    async (email: string, password: string): Promise<string | null> => {
+      const v = await getVault();
+      if (!v || !keyRef.current) return "Unlock your journal first.";
+      const em = email.trim().toLowerCase();
+      try {
+        const kp = await generateIdentityKeypair();
+        const { token } = await register(
+          em,
+          password,
+          { salt: v.salt, verifier: v.verifier, iterations: v.iterations },
+          await exportPublicKeyB64(kp.publicKey),
+          await wrapPrivateKey(keyRef.current, kp.privateKey)
+        );
+        identityRef.current = kp;
+        tokenRef.current = token;
+        await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
+        setAccount(em);
+        await markAllDirty(); // a fresh account gets the WHOLE journal, not just recent edits
+        await runSync();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : "Couldn't create the account.";
+      }
+    },
+    [runSync]
+  );
+
+  // First run: choose a passphrase and create the vault. Optionally, in the same
+  // guided step, set up a sync/sharing account (a *separate* secret from the
+  // passphrase — see invariant #4). Opens the journal last, so an account error
+  // can be shown on the setup screen without the app flashing open underneath.
   const createVault = useCallback(
-    async (passphrase: string) => {
-      const salt = newSalt();
-      const key = await deriveKeyFromSalt(passphrase, salt, PBKDF2_ITERATIONS);
-      const verifier = await makeVerifier(key);
-      await saveVault({
-        id: "vault",
-        salt,
-        verifier,
-        createdAt: Date.now(),
-        iterations: PBKDF2_ITERATIONS,
-      });
-      keyRef.current = key;
-      setEntries([]);
-      setStrands([]);
+    async (
+      passphrase: string,
+      account?: { email: string; password: string }
+    ): Promise<string | null> => {
+      // Guard so a retry (after an account error) reuses the same vault rather
+      // than regenerating the salt/key.
+      if (!keyRef.current) {
+        const salt = newSalt();
+        const key = await deriveKeyFromSalt(passphrase, salt, PBKDF2_ITERATIONS);
+        const verifier = await makeVerifier(key);
+        await saveVault({
+          id: "vault",
+          salt,
+          verifier,
+          createdAt: Date.now(),
+          iterations: PBKDF2_ITERATIONS,
+        });
+        keyRef.current = key;
+        setEntries([]);
+        setStrands([]);
+      }
+      if (account) {
+        const err = await connectCreateAccount(account.email, account.password);
+        if (err) return err; // stay on setup so they can fix email/password
+      }
       setVaultState("open");
       void requestDurableStorage();
+      return null;
     },
-    [requestDurableStorage]
+    [requestDurableStorage, connectCreateAccount]
   );
 
   // Returning: unlock with the passphrase. Returns false on a wrong one.
@@ -1027,37 +1074,6 @@ export function useJournal() {
 
   // ---- Sync account (opt-in) --------------------------------------------
 
-  // Create a sync account from THIS device's existing vault, then upload
-  // everything. Requires being unlocked. Returns an error message, or null on
-  // success. (Identity keypair is deferred to the sharing chapter — the server
-  // column is ready; we send an empty public key for now.)
-  const connectCreateAccount = useCallback(
-    async (email: string, password: string): Promise<string | null> => {
-      const v = await getVault();
-      if (!v || !keyRef.current) return "Unlock your journal first.";
-      const em = email.trim().toLowerCase();
-      try {
-        const kp = await generateIdentityKeypair();
-        const { token } = await register(
-          em,
-          password,
-          { salt: v.salt, verifier: v.verifier, iterations: v.iterations },
-          await exportPublicKeyB64(kp.publicKey),
-          await wrapPrivateKey(keyRef.current, kp.privateKey)
-        );
-        identityRef.current = kp;
-        tokenRef.current = token;
-        await saveSyncState({ id: "state", cursor: 0, token, accountEmail: em });
-        setAccount(em);
-        await markAllDirty(); // a fresh account gets the WHOLE journal, not just recent edits
-        await runSync();
-        return null;
-      } catch (e) {
-        return e instanceof Error ? e.message : "Couldn't create the account.";
-      }
-    },
-    [runSync]
-  );
 
   // Sign in on a NEW device to join an existing account: fetch the vault, save
   // it, then drop to the unlock screen so the passphrase re-derives the key and

@@ -2,6 +2,7 @@
 // A quiet in-app guide. Opened from the “?” in the header; dismissed by the ✕,
 // a tap outside, or Escape. Calm, second-person copy that matches the app.
 import { useEffect, useRef, useState } from "react";
+import { sendFeedback } from "../lib/api";
 
 // Donation addresses shown in the Support section. Just copyable text + a link —
 // no processor, no widget, no tracker, no CSP change (privacy-safe).
@@ -30,6 +31,68 @@ function CopyRow({ label, value }: { label: string; value: string }) {
         <span className="support-copy">{copied ? "copied ✓" : "copy"}</span>
       </button>
     </div>
+  );
+}
+
+// A calm note to the maker. Plainly separate from the journal (not encrypted,
+// not an entry) — just a message you chose to send. No obligation either way.
+function NoteToMaker() {
+  const [message, setMessage] = useState("");
+  const [contact, setContact] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function send() {
+    const m = message.trim();
+    if (!m || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await sendFeedback(m, contact.trim() || undefined);
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't send that just now — try again in a bit.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <section className="note-maker">
+        <h3>Thank you</h3>
+        <p>Got it. I read these when I can — no rush, no obligation. It means a lot.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="note-maker">
+      <h3>Tell me what's clunky</h3>
+      <p>
+        Something confusing, missing, or just a thought? Send it my way. This is a
+        plain note to me — kept separate from your journal, not part of your
+        private, encrypted writing. I read these when I can, no rush.
+      </p>
+      <textarea
+        className="note-input"
+        rows={3}
+        placeholder="What's on your mind about Driftless?"
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+      />
+      <input
+        className="note-contact"
+        placeholder="Email, if you'd like a reply (optional)"
+        value={contact}
+        onChange={(e) => setContact(e.target.value)}
+      />
+      {error && <p className="note-error">{error}</p>}
+      <button className="save-btn note-send" disabled={!message.trim() || busy} onClick={send}>
+        {busy ? "Sending…" : "Send"}
+      </button>
+    </section>
   );
 }
 
@@ -127,6 +190,8 @@ export function HelpSheet({
               so back up now and then.
             </p>
           </section>
+
+          <NoteToMaker />
 
           <section className="support" ref={supportRef}>
             <h3>Support Driftless</h3>

@@ -116,6 +116,18 @@ export function pullChanges(
   return req(`/sync/pull?since=${since}`, { token });
 }
 
+// ---- feedback (a calm note to the maker) ----
+
+// Open endpoint — no account needed. Token is sent if present, only so a note
+// can be attributed; it's never required.
+export function sendFeedback(
+  message: string,
+  contact?: string,
+  token?: string | null
+): Promise<{ ok: boolean }> {
+  return req("/feedback", { method: "POST", token: token ?? undefined, body: { message, contact } });
+}
+
 // ---- shared strands (S3) ----
 
 export type SharedRecord = {

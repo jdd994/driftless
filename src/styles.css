@@ -729,6 +729,25 @@ kbd {
 .help-body h3 { font-family: var(--serif); font-weight: 500; font-size: 16px; color: var(--ink); margin: 0 0 6px; }
 .help-body p { font-family: var(--sans); font-size: 13.5px; line-height: 1.6; color: var(--ink-soft); margin: 0 0 6px; }
 .help-body b { color: var(--ink); font-weight: 600; }
+.note-maker { border-top: 1px solid var(--line-soft); padding-top: 4px; }
+.note-input, .note-contact {
+  width: 100%;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  color: var(--ink);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  margin-top: 8px;
+  resize: vertical;
+}
+.note-input:focus, .note-contact:focus { border-color: rgba(224, 163, 62, 0.45); }
+.note-input::placeholder, .note-contact::placeholder { color: var(--ink-faint); }
+.note-error { font-family: var(--sans); font-size: 12.5px; color: var(--danger); margin: 8px 0 0; }
+.note-send { margin-top: 10px; padding: 9px 16px; font-size: 13px; }
+
 .support-row { margin-top: 10px; }
 .support-label { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
 .support-addr {
@@ -783,6 +802,9 @@ kbd {
 }
 .lock-card .brand { font-size: 28px; margin-bottom: 16px; }
 .lock-lead { font-family: var(--serif); font-size: 16px; line-height: 1.5; color: var(--ink-soft); margin: 0 0 20px; }
+.lock-lead b { color: var(--ink); font-weight: 600; }
+.lock-sub { font-family: var(--sans); font-size: 12.5px; line-height: 1.6; color: var(--ink-faint); margin: -8px 0 18px; }
+.lock-sub b { color: var(--ink-soft); font-weight: 600; }
 .lock-input {
   width: 100%;
   font-family: var(--sans);
