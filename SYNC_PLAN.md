@@ -200,6 +200,10 @@ later, move `updatedAt` to a logical per-record version counter and encrypt
 
 ## Appendix — Sharing & family strands (future chapter, after sync)
 
+> **Full build plan: see `SHARING_PLAN.md`** — concrete phases (S1–S5), the
+> server shared-access model, and the invite/key-exchange flow. The summary
+> below remains as the why.
+
 The long-term vision: a **private, co-authored, multi-generational family memory
 keeper.** Decided in conversation (2026-06-30); recorded so the sync build above
 is shaped to support it. None of this is built; it comes *after* sync.
