@@ -154,16 +154,92 @@ gives forward secrecy for *future* content.
    no schema change, same forward-secrecy property (family strands are small, so
    re-encrypting all pieces on the rare removal is cheap). *Deferred:* ownership
    transfer (owner can't leave yet); reorder/delete of shared pieces.
-5. **S5 — Social recovery.** The family together restores a member who lost their
+5. **S6 — Invite by link (build a family painlessly).** *Next up — designed
+   below.* A private link you send through your own channel (text, in person)
+   lets someone join a strand without you knowing their account email and
+   without them pre-registering. **No user search, ever** (that's a directory /
+   social graph — against the soul). The link is an intentional, revocable
+   capability, and the server still only holds ciphertext.
+6. **S5 — Social recovery.** The family together restores a member who lost their
    passphrase — K-of-N Shamir secret sharing of a recovery secret, each share
    wrapped to a member's public key; the server holds no usable share. The
    frontier; design in detail when we reach it.
 
 ---
 
+## S6 design — invite by link
+
+**The problem.** Email-invite (S3/S4) needs the invitee to already have an
+account *and* you to know its exact email. For gathering a family that's clunky.
+We want: send a link → they open it → they're in. Without a searchable user
+directory (which would betray the whole ethos).
+
+**The crypto (server never learns the strand key).** The link carries a random
+32-byte **link secret**, placed in the URL **fragment** (`#…`), which browsers
+never send to a server. From it the client derives two independent sub-keys with
+HKDF:
+- `wrapKey = HKDF(linkSecret, "…wrap")` — AES-GCM-encrypts the strand DEK. Stored
+  on the server as opaque ciphertext. The server never sees `wrapKey` or the DEK.
+- `joinProof = HKDF(linkSecret, "…proof")` — the server stores only
+  `SHA-256(joinProof)`. A joiner proves possession of the link by sending
+  `joinProof`; because HKDF outputs are independent, the server learning
+  `joinProof` reveals nothing about `wrapKey`. So a server breach yields neither
+  the DEK nor a way to join.
+
+**Server (new `strand_invites` table + endpoints).**
+```sql
+CREATE TABLE strand_invites (
+  invite_id       TEXT PRIMARY KEY,
+  strand_id       TEXT NOT NULL REFERENCES shared_strands(strand_id),
+  created_by      TEXT NOT NULL,      -- user_id
+  wrapped_dek     TEXT NOT NULL,      -- DEK encrypted with the link's wrapKey (JSON CipherBlob)
+  join_proof_hash TEXT NOT NULL,      -- SHA-256(joinProof), base64
+  dek_epoch       INTEGER NOT NULL,
+  expires_at      INTEGER NOT NULL,
+  revoked         INTEGER NOT NULL DEFAULT 0,
+  max_uses        INTEGER NOT NULL DEFAULT 20,
+  uses            INTEGER NOT NULL DEFAULT 0,
+  created_at      INTEGER NOT NULL
+);
+```
+- `POST /shared/:id/invite-link` (member) `{ inviteId, wrappedDEK, joinProofHash, dekEpoch, expiresAt, maxUses }` → create.
+- `POST /shared/join/claim` (auth) `{ inviteId, joinProof }` → verify hash + not
+  expired/revoked/used-up → return `{ strandId, wrappedDEK, dekEpoch }`.
+- `POST /shared/join/finish` (auth) `{ inviteId, joinProof, ephemeralPub, wrappedDEK }`
+  → verify again → insert the caller as a member with the DEK re-wrapped to *their*
+  identity key; `uses++`. Idempotent if already a member.
+- `GET /shared/:id/invites` + `POST /shared/:id/invites/:inviteId/revoke` (owner)
+  → list / revoke. **`/remove` (rotation) revokes all of a strand's invites**, so
+  a re-key kills outstanding links (the old link's `wrappedDEK` is a stale epoch).
+
+**Client — owner creates a link.** Generate `linkSecret`; derive `wrapKey`,
+`joinProof`; encrypt the DEK with `wrapKey`; `POST /invite-link`; hand back
+`https://<app>/#join=<inviteId>.<linkSecretB64>`. (Copyable + Web Share.)
+
+**Client — joiner opens the link.** Detect `#join=…` on load. They need a vault +
+account (identity key) to hold a membership, so the pending invite is stashed and
+the join **resumes automatically after first-run setup / unlock** — the guided
+setup already makes an account easy. Then: `claim` → decrypt DEK with `wrapKey` →
+re-wrap to own identity → `finish` → refresh Shared → "You've joined …".
+
+**Decisions (defaults, easily changed):**
+- **Reusable link, revocable, 7-day expiry, `max_uses` ~20** — one link you send
+  to several family members; owner sees join count and can revoke. (Single-use is
+  a future toggle.)
+- **Joining requires an account** — a membership must belong to someone with an
+  identity key. The link makes that onboarding one smooth path.
+- **Link = a capability** (like a house key). Framed to share privately; expiry +
+  revoke + rotation-kills-links bound the exposure. Intercepting the fragment ==
+  access, inherent to any invite link.
+- **No user search / directory.** Locked.
+
+---
+
 ## Decisions locked here
-- **Members need a Driftless account** (invite by email; server already has their
-  public key). Invite-by-link for non-users deferred.
+- **Members need a Driftless account** (a membership must belong to an identity
+  key). Invite-by-**link** (S6, designed above) removes the need to *know* their
+  email or have them pre-register — the link guides them through setup, then
+  joins. Still no user search / directory.
 - **Shared pieces are separate DEK-encrypted objects**, distinct from personal
   vault-encrypted entries — clean separation of personal vs shared.
 - **ECDH P-256** identity keys; **ECIES-style** DEK wrapping (ephemeral ECDH +
