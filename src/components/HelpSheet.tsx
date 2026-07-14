@@ -4,12 +4,17 @@
 import { useEffect, useRef, useState } from "react";
 import { sendFeedback } from "../lib/api";
 
-// Tip / support addresses shown in the Support section. Just copyable text + a
-// link — no processor, no widget, no tracker, no CSP change (privacy-safe).
+// Tip / support options. A card link (Ko-fi, PayPal underneath) leads, since it's
+// the welcoming front door for most people; crypto follows as the quiet
+// zero-paperwork alternative. Just an outbound link + copyable addresses — no
+// processor or widget in the app, no tracker, no CSP change (privacy-safe). Add
+// more crypto addresses by extending `crypto` — one line.
 const SUPPORT = {
-  btc: "bc1qvhzyyhjngwyc02p5ska0pk33tvn6dnq06vacgv", // device-verified on Trezor
-  eth: "0x6857f91F7Fcd7B45a3ab3A51D2CdC47E23FE8c75",
-  fiatUrl: "https://ko-fi.com/johnny65449", // card/PayPal tips (outbound link)
+  fiatUrl: "https://ko-fi.com/johnny65449", // card / PayPal, via Ko-fi
+  crypto: [
+    { label: "Bitcoin", value: "bc1qvhzyyhjngwyc02p5ska0pk33tvn6dnq06vacgv" }, // device-verified on Trezor
+    { label: "Ethereum", value: "0x6857f91F7Fcd7B45a3ab3A51D2CdC47E23FE8c75" },
+  ],
 };
 
 function CopyRow({ label, value }: { label: string; value: string }) {
@@ -231,18 +236,18 @@ export function HelpSheet({
               Driftless is free, forever — no ads, no tracking, no one reading your words. If it's
               meaningful to you, a small tip helps keep it alive.
             </p>
-            <CopyRow label="Bitcoin" value={SUPPORT.btc} />
-            <CopyRow label="Ethereum" value={SUPPORT.eth} />
-            {SUPPORT.fiatUrl && (
-              <a
-                className="support-fiat"
-                href={SUPPORT.fiatUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Prefer a card? Support on Ko-fi →
-              </a>
-            )}
+            {/* Card first — the front door (Ko-fi, PayPal underneath; works from
+                anywhere, in any currency). */}
+            <a className="support-card" href={SUPPORT.fiatUrl} target="_blank" rel="noopener noreferrer">
+              Leave a tip with a card &nbsp;→
+            </a>
+            {/* Crypto — the quiet zero-paperwork alternative. */}
+            <div className="support-crypto">
+              <span className="support-crypto-label">or, if you prefer crypto</span>
+              {SUPPORT.crypto.map((c) => (
+                <CopyRow key={c.label} label={c.label} value={c.value} />
+              ))}
+            </div>
           </section>
         </div>
       </div>

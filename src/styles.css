@@ -769,6 +769,32 @@ kbd {
 .support-copy { flex: none; font-family: var(--sans); font-size: 11px; font-weight: 600; color: var(--amber); }
 .support-fiat { display: inline-block; margin-top: 12px; font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--amber); text-decoration: none; }
 .support-fiat:hover { text-decoration: underline; }
+/* Card tip — the primary, welcoming option. A calm amber button. */
+.support-card {
+  display: block;
+  text-align: center;
+  margin-top: 6px;
+  padding: 11px 16px;
+  border-radius: 11px;
+  background: var(--amber-dim);
+  border: 1px solid rgba(219, 161, 74, 0.3);
+  color: var(--amber);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+.support-card:hover { background: rgba(219, 161, 74, 0.2); border-color: var(--amber); }
+/* Crypto — quiet secondary. */
+.support-crypto { margin-top: 18px; }
+.support-crypto-label {
+  display: block;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
 
 /* ---------- account / sync ---------- */
 .account-blurb, .account-status, .account-hint {
