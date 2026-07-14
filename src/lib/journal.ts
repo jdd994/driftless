@@ -218,6 +218,52 @@ export function groupByDay(entries: Entry[]): DayGroup[] {
   return groups;
 }
 
+// ---- On this day --------------------------------------------------------
+// Resurface what you wrote on this calendar day (month + day) in earlier years.
+// This is Driftless's whole purpose pointed backwards: not "look how much you
+// posted", but "here is your own past self, for you to sit with."
+//
+// Deliberately PULL, never push. It appears when you happen to open the app; it
+// never notifies, buzzes, or emails. (See the scheduling-decision memory:
+// future anchors and other pull surfaces are welcome; reminders/notifications
+// are push, and Driftless says no to push — presence shouldn't be nagged out of
+// someone.) It also never counts or ranks; it just quietly hands you the page.
+//
+// Matched on createdAt — when the thought was written — which is always present
+// and gives an unambiguous "a year ago today you wrote this". Surfacing on an
+// anchor's *lived* anniversary is a lovely future extension; see STRANDS_PLAN.md.
+
+export type OnThisDayBucket = { yearsAgo: number; entries: Entry[] };
+
+export function onThisDay(entries: Entry[], now: number): OnThisDayBucket[] {
+  const today = new Date(now);
+  const month = today.getMonth();
+  const date = today.getDate();
+  const thisYear = today.getFullYear();
+
+  const byYearsAgo = new Map<number, Entry[]>();
+  for (const e of entries) {
+    const t = new Date(e.createdAt);
+    if (t.getMonth() !== month || t.getDate() !== date) continue;
+    const yearsAgo = thisYear - t.getFullYear();
+    if (yearsAgo <= 0) continue; // only earlier years, never today itself
+    const list = byYearsAgo.get(yearsAgo) ?? [];
+    list.push(e);
+    byYearsAgo.set(yearsAgo, list);
+  }
+
+  return [...byYearsAgo.entries()]
+    .sort((a, b) => a[0] - b[0]) // most recent year first: "a year ago" leads
+    .map(([yearsAgo, es]) => ({
+      yearsAgo,
+      entries: es.sort((a, b) => b.createdAt - a.createdAt),
+    }));
+}
+
+export function yearsAgoLabel(yearsAgo: number): string {
+  return yearsAgo === 1 ? "A year ago today" : `${yearsAgo} years ago today`;
+}
+
 // ---- Strands ------------------------------------------------------------
 // A Strand is a named, ordered collection of entries — the "narrative order"
 // axis (memory pieced together, a song's verses, a book's sections). It only
