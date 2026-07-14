@@ -14,7 +14,52 @@ type Env = {
   ALLOWED_ORIGIN: string;
 };
 
-const MAX_MEDIA_BYTES = 8 * 1024 * 1024; // 8 MB — images are compressed client-side
+const MAX_MEDIA_BYTES = 8 * 1024 * 1024; // 8 MB — per photo (images are compressed client-side)
+
+// ---- Per-user storage quotas --------------------------------------------
+// The point of these is cost safety, not stinginess: they are set far above any
+// plausible human use, but they bound the worst case a single account (or a bot
+// that slipped past the signup rate limit) can cost the person paying the
+// Cloudflare bill. See ../HARDENING.md for the whole threat/cost model.
+//
+// Worst case per maxed account ≈ 100 MB (D1 text) + 2 GB (R2 media). R2 egress
+// is free, so a maxed account costs pennies/month of storage; combined with the
+// register rate limit that keeps the total bounded and predictable.
+const MAX_USER_OBJECTS = 100_000; // entries + strands (incl. tombstones)
+const MAX_USER_CONTENT_BYTES = 100 * 1024 * 1024; // 100 MB of text ciphertext
+const MAX_USER_MEDIA_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB of photos
+
+// Current object footprint for a user: row count + total ciphertext bytes.
+// One indexed query; runs once per push. Counts tombstones too, so a
+// create/delete loop can't accumulate unbounded rows.
+async function objectUsage(db: D1Database, userId: string): Promise<{ n: number; bytes: number }> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(content)), 0) AS bytes FROM objects WHERE user_id = ?")
+    .bind(userId)
+    .first<{ n: number; bytes: number }>();
+  return { n: row?.n ?? 0, bytes: row?.bytes ?? 0 };
+}
+
+// Running media byte total, kept in user_usage (R2 has no cheap SUM). Absent row
+// means zero.
+async function mediaUsage(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT media_bytes AS b FROM user_usage WHERE user_id = ?")
+    .bind(userId)
+    .first<{ b: number }>();
+  return row?.b ?? 0;
+}
+
+async function addMediaUsage(db: D1Database, userId: string, delta: number): Promise<void> {
+  // Upsert, clamped at zero so a stray decrement can never go negative.
+  await db
+    .prepare(
+      "INSERT INTO user_usage (user_id, media_bytes) VALUES (?, MAX(0, ?)) " +
+        "ON CONFLICT(user_id) DO UPDATE SET media_bytes = MAX(0, media_bytes + ?)"
+    )
+    .bind(userId, delta, delta)
+    .run();
+}
 
 type Vars = { userId: string };
 type AppContext = Context<{ Bindings: Env; Variables: Vars }>;
@@ -79,12 +124,25 @@ app.get("/me", requireAuth, (c) => c.json({ userId: c.get("userId") }));
 // non-secret metadata so the client can render it. See MEDIA_PLAN.md.
 
 app.put("/media/:id", requireAuth, async (c) => {
+  const userId = c.get("userId");
   const id = c.req.param("id")!;
   const body = await c.req.arrayBuffer();
   if (body.byteLength === 0) return c.json({ error: "empty upload" }, 400);
   if (body.byteLength > MAX_MEDIA_BYTES) return c.json({ error: "image too large" }, 413);
   const type = c.req.query("type") || "application/octet-stream";
-  await c.env.MEDIA.put(`u/${c.get("userId")}/${id}`, body, { httpMetadata: { contentType: type } });
+  const key = `u/${userId}/${id}`;
+
+  // Idempotent: photos are write-once (a client uuid per image), so a retried
+  // upload of one already stored must not be double-counted against the quota.
+  const already = await c.env.MEDIA.head(key);
+  if (already) return c.json({ ok: true });
+
+  if ((await mediaUsage(c.env.DB, userId)) + body.byteLength > MAX_USER_MEDIA_BYTES) {
+    return c.json({ error: "This account has reached its photo storage limit." }, 413);
+  }
+
+  await c.env.MEDIA.put(key, body, { httpMetadata: { contentType: type } });
+  await addMediaUsage(c.env.DB, userId, body.byteLength);
   return c.json({ ok: true });
 });
 
@@ -102,7 +160,12 @@ app.get("/media/:id", requireAuth, async (c) => {
 
 // Free the storage when a photo is removed (M3). Idempotent.
 app.delete("/media/:id", requireAuth, async (c) => {
-  await c.env.MEDIA.delete(`u/${c.get("userId")}/${c.req.param("id")!}`);
+  const userId = c.get("userId");
+  const key = `u/${userId}/${c.req.param("id")!}`;
+  // Read the size before deleting so the quota counter can be credited back.
+  const obj = await c.env.MEDIA.head(key);
+  await c.env.MEDIA.delete(key);
+  if (obj) await addMediaUsage(c.env.DB, userId, -obj.size);
   return c.json({ ok: true });
 });
 
@@ -216,6 +279,25 @@ app.post("/sync/push", requireAuth, async (c) => {
   if (changes.length > MAX_PUSH) return c.json({ error: `too many changes (max ${MAX_PUSH})` }, 400);
   for (const ch of changes) {
     if (!validChange(ch)) return c.json({ error: "malformed change" }, 400);
+  }
+
+  // Quota check before applying. We compare current stored footprint plus the
+  // incoming batch against the caps. Incoming is counted in full (updates to
+  // existing rows are over-counted as new) — deliberately conservative, and
+  // irrelevant far below the ceiling where real journals live. A rejected push
+  // leaves the client's data intact locally; it just can't upload more.
+  const usage = await objectUsage(c.env.DB, userId);
+  let addRows = 0;
+  let addBytes = 0;
+  for (const ch of changes) {
+    addRows += 1;
+    addBytes += JSON.stringify(ch.content).length;
+  }
+  if (usage.n + addRows > MAX_USER_OBJECTS || usage.bytes + addBytes > MAX_USER_CONTENT_BYTES) {
+    return c.json(
+      { error: "This account has reached its storage limit. Nothing was lost — it stays on your device." },
+      413
+    );
   }
 
   let applied = 0;

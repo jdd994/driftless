@@ -120,3 +120,14 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   expires_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS rate_limits_by_expiry ON rate_limits(expires_at);
+
+-- ---- Per-user usage (storage quotas) -------------------------------------
+-- A running byte total for a user's media in R2, which (unlike the objects
+-- table) can't be cheaply SUMmed. Incremented on upload, credited back on
+-- delete. Object-count/bytes are computed live from `objects`, so they need no
+-- row here. Bounds the worst-case storage cost of any single account. See
+-- ../HARDENING.md.
+CREATE TABLE IF NOT EXISTS user_usage (
+  user_id     TEXT PRIMARY KEY REFERENCES users(id),
+  media_bytes INTEGER NOT NULL DEFAULT 0
+);
