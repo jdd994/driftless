@@ -5,6 +5,7 @@ import { EntryItem } from "./EntryItem";
 type Props = {
   entries: Entry[]; // already filtered + sorted (newest first)
   totalCount: number; // unfiltered count, to tell the two empty states apart
+  onReadDay: (entries: Entry[], label: string) => void; // open a day as one flowing read
   onSave: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onAnchor: (id: string, anchor: Anchor | null) => void;
@@ -22,6 +23,7 @@ const RECENT_WINDOW = 1000 * 60 * 60 * 6; // glow ticks from the last 6 hours
 export function Stream({
   entries,
   totalCount,
+  onReadDay,
   onSave,
   onDelete,
   onAnchor,
@@ -67,6 +69,17 @@ export function Stream({
           <div className="dayhead">
             <span className="label">{g.label}</span>
             <span className="rule" />
+            {/* Read the day as one flowing piece. Entries reversed so the day
+                reads forward in time (morning → night), not newest-first. */}
+            {g.entries.length > 1 && (
+              <button
+                className="dayread"
+                onClick={() => onReadDay([...g.entries].reverse(), g.label)}
+                title="Read this day as one"
+              >
+                read
+              </button>
+            )}
           </div>
           {g.entries.map((e) => (
             <EntryItem

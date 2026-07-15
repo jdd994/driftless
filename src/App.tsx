@@ -9,6 +9,7 @@ import { Toolbar } from "./components/Toolbar";
 import { TagBar } from "./components/TagBar";
 import { Stream } from "./components/Stream";
 import { OnThisDay } from "./components/OnThisDay";
+import { Reader } from "./components/Reader";
 import { Timeline } from "./components/Timeline";
 import { StrandsView } from "./components/StrandsView";
 import { SharedView } from "./components/SharedView";
@@ -68,6 +69,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [toast, setToast] = useState<ToastData>(null);
   const [veil, setVeil] = useState(0);
+  const [reading, setReading] = useState<{ entries: Entry[]; label: string } | null>(null);
   const [pendingInvite, setPendingInvite] = useState(() => readPendingInvite());
   const toastTimer = useRef<number | null>(null);
   const joiningRef = useRef(false);
@@ -359,6 +361,7 @@ export default function App() {
           <Stream
             entries={visible}
             totalCount={j.entries.length}
+            onReadDay={(entries, label) => setReading({ entries, label })}
             onSave={j.updateEntry}
             onDelete={handleDelete}
             onAnchor={j.setAnchor}
@@ -437,6 +440,14 @@ export default function App() {
       )}
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
+      {reading && (
+        <Reader
+          title={reading.label}
+          subtitle={reading.entries.length + (reading.entries.length === 1 ? " thought" : " thoughts")}
+          entries={reading.entries}
+          onClose={() => setReading(null)}
+        />
+      )}
       {help && <HelpSheet focus={help} onClose={() => setHelp(null)} />}
       {showSettings && (
         <Settings

@@ -987,6 +987,111 @@ kbd {
 /* On the welcome screen the hint sits inside the flow, a touch tighter. */
 .welcome .install-hint { margin: 4px 0 18px; }
 
+/* ---------- day "read" affordance + Reader ----------
+   A quiet button on each day header that opens the day as one flowing read. */
+.dayread {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.dayread:hover { color: var(--amber); background: var(--amber-dim); }
+
+/* The reading overlay — a page, not a feed. Warm, centred, serif, unhurried. */
+.reader-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(10, 8, 5, 0.72);
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+}
+.reader {
+  width: 100%;
+  max-width: 680px;
+  min-height: 100vh;
+  background: var(--bg);
+  box-shadow: 0 0 80px -20px rgba(0, 0, 0, 0.6);
+}
+.reader-bar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 18px;
+  background: linear-gradient(var(--bg), rgba(20, 17, 11, 0));
+}
+.reader-close {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.reader-close:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+.reader-page {
+  padding: 6px 34px 22vh;
+  max-width: 620px;
+  margin: 0 auto;
+}
+.reader-head { margin-bottom: 34px; }
+.reader-title {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+.reader-sub {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin: 0;
+}
+
+/* Each fragment flows into the next; a faint time marker gives the day its
+   rhythm without breaking the read. */
+.reader-frag { margin-bottom: 30px; }
+.reader-time {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+  opacity: 0.7;
+}
+.reader-para {
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.8;
+  color: var(--ink);
+  margin: 0 0 0.9em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reader-para:last-child { margin-bottom: 0; }
+.reader-photo {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  font-style: italic;
+  margin: 6px 0 0;
+}
+
 /* ---------- welcome (first run) ---------- */
 .welcome-screen { align-items: flex-start; }
 .welcome {
