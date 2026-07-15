@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS vaults (
   iterations  INTEGER NOT NULL,
   identity_priv_wrapped TEXT,         -- identity private key, wrapped by the
                                       -- vault key (opaque; for new-device recovery)
+  wrapped_dek TEXT,                   -- envelope: the data key (DEK) wrapped by the
+                                      -- passphrase-derived KEK (opaque). Null on
+                                      -- legacy vaults; set on register/passphrase change.
   created_at  INTEGER NOT NULL
 );
 

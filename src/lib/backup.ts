@@ -18,6 +18,10 @@ export type BackupVault = {
   salt: number[];
   verifier: CipherBlob;
   iterations?: number;
+  // Envelope: the wrapped DEK. REQUIRED for restoring an envelope vault — without
+  // it the restored vault can't be opened (the passphrase-derived KEK is not the
+  // data key). Absent only in backups of legacy pre-envelope vaults.
+  wrappedDEK?: CipherBlob;
   createdAt: number;
 };
 
@@ -57,6 +61,7 @@ export function buildBackup(
       salt: vault.salt,
       verifier: vault.verifier,
       iterations: vault.iterations,
+      wrappedDEK: vault.wrappedDEK,
       createdAt: vault.createdAt,
     },
     entries: entries.map(toRecord),

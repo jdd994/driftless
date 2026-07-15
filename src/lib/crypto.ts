@@ -335,6 +335,19 @@ export async function makeVerifier(key: CryptoKey): Promise<CipherBlob> {
   return encryptString(key, VERIFIER_TEXT);
 }
 
+// ---- Envelope encryption (change-passphrase without re-encrypting data) ---
+// The vault holds a random DEK that encrypts all data. The passphrase derives a
+// KEK that only WRAPS the DEK. Changing the passphrase re-wraps the DEK — the
+// DEK (and therefore every ciphertext, and each device's ability to read it)
+// never changes. wrapVaultKey/unwrapVaultKey move the DEK in and out of that
+// wrapped form; the wrapped blob is opaque, safe to store and sync.
+export async function wrapVaultKey(kek: CryptoKey, dek: CryptoKey): Promise<CipherBlob> {
+  return encryptString(kek, JSON.stringify(await exportKeyRaw(dek)));
+}
+export async function unwrapVaultKey(kek: CryptoKey, blob: CipherBlob): Promise<CryptoKey> {
+  return importKeyRaw(JSON.parse(await decryptString(kek, blob)) as number[]);
+}
+
 export async function checkVerifier(key: CryptoKey, blob: CipherBlob): Promise<boolean> {
   try {
     const text = await decryptString(key, blob);

@@ -802,8 +802,8 @@ app.post("/auth/register", async (c) => {
       "INSERT INTO users (id, email, pw_hash, pw_salt, identity_pub, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).bind(userId, email, hashB64, saltB64, identityPublicKey, now),
     c.env.DB.prepare(
-      "INSERT INTO vaults (user_id, salt, verifier, iterations, identity_priv_wrapped, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).bind(userId, JSON.stringify(vault.salt), JSON.stringify(vault.verifier), vault.iterations ?? 600000, identityPrivWrapped ? JSON.stringify(identityPrivWrapped) : null, now),
+      "INSERT INTO vaults (user_id, salt, verifier, iterations, identity_priv_wrapped, wrapped_dek, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(userId, JSON.stringify(vault.salt), JSON.stringify(vault.verifier), vault.iterations ?? 600000, identityPrivWrapped ? JSON.stringify(identityPrivWrapped) : null, vault.wrappedDEK ? JSON.stringify(vault.wrappedDEK) : null, now),
   ]);
 
   const token = await signToken(userId, c.env.TOKEN_SECRET);
@@ -837,10 +837,10 @@ app.post("/auth/login", async (c) => {
 app.get("/vault", requireAuth, async (c) => {
   const userId = c.get("userId");
   const v = await c.env.DB.prepare(
-    "SELECT salt, verifier, iterations, identity_priv_wrapped FROM vaults WHERE user_id = ?"
+    "SELECT salt, verifier, iterations, identity_priv_wrapped, wrapped_dek FROM vaults WHERE user_id = ?"
   )
     .bind(userId)
-    .first<{ salt: string; verifier: string; iterations: number; identity_priv_wrapped: string | null }>();
+    .first<{ salt: string; verifier: string; iterations: number; identity_priv_wrapped: string | null; wrapped_dek: string | null }>();
   if (!v) return c.json({ error: "No vault found." }, 404);
   const u = await c.env.DB.prepare("SELECT identity_pub FROM users WHERE id = ?")
     .bind(userId)
@@ -851,7 +851,28 @@ app.get("/vault", requireAuth, async (c) => {
     iterations: v.iterations,
     identityPublicKey: u?.identity_pub ?? null,
     identityPrivWrapped: v.identity_priv_wrapped ? JSON.parse(v.identity_priv_wrapped) : null,
+    wrappedDEK: v.wrapped_dek ? JSON.parse(v.wrapped_dek) : null,
   });
+});
+
+// Update the vault after a passphrase change: new salt, verifier, iterations,
+// and re-wrapped DEK. Envelope-only — the entry/strand ciphertext is untouched
+// (the DEK didn't change), so no re-upload is needed. This is what makes another
+// device require the new passphrase the next time it signs in.
+app.put("/vault", requireAuth, async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json().catch(() => null);
+  if (!body || !Array.isArray(body.salt) || !body.verifier || !body.wrappedDEK) {
+    return c.json({ error: "Missing salt, verifier, or wrappedDEK." }, 400);
+  }
+  const res = await c.env.DB.prepare(
+    "UPDATE vaults SET salt = ?, verifier = ?, iterations = ?, wrapped_dek = ? WHERE user_id = ?"
+  ).bind(
+    JSON.stringify(body.salt), JSON.stringify(body.verifier),
+    body.iterations ?? 600000, JSON.stringify(body.wrappedDEK), userId
+  ).run();
+  if (!res.meta.changes) return c.json({ error: "No vault found." }, 404);
+  return c.json({ ok: true });
 });
 
 // Set/update this account's identity keypair (public + wrapped private). Used to

@@ -35,6 +35,9 @@ export type VaultMetaDTO = {
   iterations?: number;
   identityPublicKey?: string | null;
   identityPrivWrapped?: WrappedKey | null;
+  // Envelope encryption: the DEK wrapped by the passphrase-derived KEK. Opaque —
+  // the server stores and returns it, never reads it. Absent for legacy vaults.
+  wrappedDEK?: CipherBlob;
 };
 
 type ReqOpts = { method?: string; token?: string; body?: unknown };
@@ -88,6 +91,16 @@ export function login(
 // passphrase.
 export function fetchVault(token: string): Promise<VaultMetaDTO> {
   return req("/vault", { token });
+}
+
+// Update the vault record after a passphrase change: new salt, verifier, and
+// re-wrapped DEK. Only these envelope fields move; the ciphertext is untouched,
+// so other devices keep reading their data and just need the new wrap to unlock.
+export function updateVault(
+  token: string,
+  vault: { salt: number[]; verifier: CipherBlob; iterations?: number; wrappedDEK: CipherBlob }
+): Promise<{ ok: boolean }> {
+  return req("/vault", { method: "PUT", token, body: vault });
 }
 
 // This account's own user id (for authorship of shared pieces).

@@ -461,6 +461,7 @@ export default function App() {
           onDisconnect={j.disconnectAccount}
           onDeleteAccount={j.deleteAccount}
           onSyncNow={j.syncNow}
+          onChangePassphrase={j.changePassphrase}
         />
       )}
       <div className="night-veil" style={{ opacity: veil }} aria-hidden="true" />

@@ -25,7 +25,82 @@ type Props = {
   onDisconnect: () => void;
   onDeleteAccount: () => Promise<string | null>;
   onSyncNow: () => void;
+  onChangePassphrase: (current: string, next: string) => Promise<string | null>;
 };
+
+// Change the passphrase (only while unlocked). Thanks to envelope encryption this
+// is instant and doesn't re-encrypt anything; the copy explains it won't lock out
+// other devices — they just ask for the new passphrase next time they sign in.
+function ChangePassphraseSection({
+  onChangePassphrase,
+}: Pick<Props, "onChangePassphrase">) {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  function reset() {
+    setCurrent(""); setNext(""); setConfirm(""); setError(null);
+  }
+
+  async function submit() {
+    setError(null);
+    if (next.length < 8) return setError("Use at least 8 characters — a few plain words you'll remember.");
+    if (next !== confirm) return setError("The new passphrases don't match.");
+    setBusy(true);
+    const err = await onChangePassphrase(current, next);
+    setBusy(false);
+    if (err) return setError(err);
+    reset();
+    setOpen(false);
+    setDone(true);
+    setTimeout(() => setDone(false), 4000);
+  }
+
+  return (
+    <section>
+      <h3>Passphrase</h3>
+      {done ? (
+        <p className="account-status">Passphrase changed. Your notes never left this device.</p>
+      ) : !open ? (
+        <>
+          <p className="account-blurb">
+            Change the passphrase that unlocks this vault. It happens on your device — nothing is
+            re-uploaded, and your other signed-in devices simply ask for the new one next time.
+          </p>
+          <button className="ghost-btn" onClick={() => setOpen(true)}>
+            Change passphrase
+          </button>
+        </>
+      ) : (
+        <div className="account-form">
+          {error && <p className="lock-error">{error}</p>}
+          <input
+            className="anchor-input" type="password" placeholder="Current passphrase"
+            autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)}
+          />
+          <input
+            className="anchor-input" type="password" placeholder="New passphrase"
+            autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)}
+          />
+          <input
+            className="anchor-input" type="password" placeholder="New passphrase again"
+            autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+          />
+          <div className="edit-foot">
+            <button className="ghost-btn" onClick={() => { reset(); setOpen(false); }}>Cancel</button>
+            <button className="ghost-btn" disabled={busy || !current || !next} onClick={submit}>
+              {busy ? "Changing…" : "Change it"}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function AccountSection({
   account,
@@ -174,6 +249,7 @@ export function Settings({
   onDisconnect,
   onDeleteAccount,
   onSyncNow,
+  onChangePassphrase,
 }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -244,6 +320,8 @@ export function Settings({
             onDeleteAccount={onDeleteAccount}
             onSyncNow={onSyncNow}
           />
+
+          <ChangePassphraseSection onChangePassphrase={onChangePassphrase} />
         </div>
       </div>
     </div>

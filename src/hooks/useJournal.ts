@@ -20,6 +20,8 @@ import {
   wrapPrivateKey,
   unwrapPrivateKey,
   generateDEK,
+  wrapVaultKey,
+  unwrapVaultKey,
   wrapDEKForRecipient,
   unwrapDEK,
   randomLinkSecret,
@@ -78,6 +80,7 @@ import {
   joinClaim,
   joinFinish,
   deleteAccount as apiDeleteAccount,
+  updateVault,
   downloadMedia,
   deleteMediaRemote,
   uploadSharedMedia,
@@ -405,7 +408,7 @@ export function useJournal() {
         const { token, userId } = await register(
           em,
           password,
-          { salt: v.salt, verifier: v.verifier, iterations: v.iterations },
+          { salt: v.salt, verifier: v.verifier, iterations: v.iterations, wrappedDEK: v.wrappedDEK },
           await exportPublicKeyB64(kp.publicKey),
           await wrapPrivateKey(keyRef.current, kp.privateKey)
         );
@@ -437,17 +440,21 @@ export function useJournal() {
       // Guard so a retry (after an account error) reuses the same vault rather
       // than regenerating the salt/key.
       if (!keyRef.current) {
+        // Envelope model: a random DEK encrypts the data; the passphrase-derived
+        // KEK only wraps it. This is what lets the passphrase change later
+        // without re-encrypting a thing. The verifier validates the DEK.
         const salt = newSalt();
-        const key = await deriveKeyFromSalt(passphrase, salt, PBKDF2_ITERATIONS);
-        const verifier = await makeVerifier(key);
+        const kek = await deriveKeyFromSalt(passphrase, salt, PBKDF2_ITERATIONS);
+        const dek = await generateDEK();
         await saveVault({
           id: "vault",
           salt,
-          verifier,
+          verifier: await makeVerifier(dek),
+          wrappedDEK: await wrapVaultKey(kek, dek),
           createdAt: Date.now(),
           iterations: PBKDF2_ITERATIONS,
         });
-        keyRef.current = key;
+        keyRef.current = dek;
         setEntries([]);
         setStrands([]);
       }
@@ -467,12 +474,30 @@ export function useJournal() {
     async (passphrase: string): Promise<boolean> => {
       const v = await getVault();
       if (!v) return false;
-      const key = await deriveKeyFromSalt(passphrase, v.salt, v.iterations ?? 250_000);
-      const ok = await checkVerifier(key, v.verifier);
-      if (!ok) return false;
-      keyRef.current = key;
-      await loadEntries(key);
-      await loadStrands(key);
+      const kek = await deriveKeyFromSalt(passphrase, v.salt, v.iterations ?? 250_000);
+
+      let dek: CryptoKey;
+      if (v.wrappedDEK) {
+        // Envelope vault: the KEK unwraps the DEK. A wrong passphrase fails the
+        // GCM auth here.
+        try {
+          dek = await unwrapVaultKey(kek, v.wrappedDEK);
+        } catch {
+          return false;
+        }
+        if (!(await checkVerifier(dek, v.verifier))) return false;
+      } else {
+        // Legacy vault: the key was derived straight from the passphrase, so the
+        // derived key IS the data key. Verify it, then migrate to the envelope
+        // model in place — no data is re-encrypted (the DEK stays this key).
+        if (!(await checkVerifier(kek, v.verifier))) return false;
+        dek = kek;
+        await saveVault({ ...v, wrappedDEK: await wrapVaultKey(kek, dek) });
+      }
+
+      keyRef.current = dek;
+      await loadEntries(dek);
+      await loadStrands(dek);
       setVaultState("open");
       void requestDurableStorage();
       return true;
@@ -517,6 +542,70 @@ export function useJournal() {
     await clearDevice();
     setBioEnrolled(false);
   }, []);
+
+  // Change the passphrase (must be unlocked). Thanks to the envelope model this
+  // only re-wraps the DEK under a key derived from the new passphrase — NO data
+  // is re-encrypted, so it's instant and every other device keeps reading its
+  // data with the unchanged DEK. Biometric quick-unlock also survives (it wraps
+  // the raw DEK). Returns an error message, or null on success.
+  const changePassphrase = useCallback(
+    async (current: string, next: string): Promise<string | null> => {
+      const dek = keyRef.current;
+      if (!dek) return "Unlock your journal first.";
+      if (next.length < 8) return "Use at least 8 characters for the new passphrase.";
+      const v = await getVault();
+      if (!v) return "No vault on this device.";
+
+      // Prove they know the CURRENT passphrase before changing anything.
+      const curKek = await deriveKeyFromSalt(current, v.salt, v.iterations ?? 250_000);
+      let okCurrent = false;
+      try {
+        if (v.wrappedDEK) {
+          const a = await exportKeyRaw(await unwrapVaultKey(curKek, v.wrappedDEK));
+          const b = await exportKeyRaw(dek);
+          okCurrent = a.length === b.length && a.every((x, i) => x === b[i]);
+        } else {
+          okCurrent = await checkVerifier(curKek, v.verifier);
+        }
+      } catch {
+        okCurrent = false;
+      }
+      if (!okCurrent) return "That current passphrase isn't right.";
+
+      // Re-wrap the SAME DEK under a fresh salt + the new passphrase.
+      const salt = newSalt();
+      const kek = await deriveKeyFromSalt(next, salt, PBKDF2_ITERATIONS);
+      const updated: VaultMeta = {
+        ...v,
+        salt,
+        iterations: PBKDF2_ITERATIONS,
+        verifier: await makeVerifier(dek),
+        wrappedDEK: await wrapVaultKey(kek, dek),
+      };
+      await saveVault(updated);
+
+      // Propagate to the server so other devices require the new passphrase when
+      // they next sign in. Failing here isn't fatal — this device is already
+      // changed; the server just lags until the next successful sync.
+      const token = tokenRef.current;
+      if (token) {
+        try {
+          await updateVault(token, {
+            salt: updated.salt,
+            verifier: updated.verifier,
+            iterations: updated.iterations,
+            wrappedDEK: updated.wrappedDEK!,
+          });
+        } catch (e) {
+          return e instanceof Error
+            ? `Changed on this device, but the server didn't update: ${e.message}`
+            : "Changed on this device, but the server couldn't be reached.";
+        }
+      }
+      return null;
+    },
+    []
+  );
 
   const lock = useCallback(() => {
     keyRef.current = null;
@@ -792,6 +881,7 @@ export function useJournal() {
       salt: backup.vault.salt,
       verifier: backup.vault.verifier,
       iterations: backup.vault.iterations,
+      wrappedDEK: backup.vault.wrappedDEK,
       createdAt: backup.vault.createdAt,
     };
     const entries: StoredEntry[] = backup.entries.map((e) => ({
@@ -1427,6 +1517,7 @@ export function useJournal() {
           salt: meta.salt,
           verifier: meta.verifier,
           iterations: meta.iterations,
+          wrappedDEK: meta.wrappedDEK,
           createdAt: Date.now(),
         });
         tokenRef.current = token;
@@ -1508,6 +1599,7 @@ export function useJournal() {
     connectSignIn,
     disconnectAccount,
     deleteAccount,
+    changePassphrase,
     syncNow: runSync,
     sharedStrands,
     createSharedStrand,

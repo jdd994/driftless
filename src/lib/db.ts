@@ -25,6 +25,12 @@ export type VaultMeta = {
   // work factor can be raised for new vaults without locking out old ones.
   // Absent on vaults created before this field existed (treat as 250_000).
   iterations?: number;
+  // Envelope encryption: the random data key (DEK), wrapped by the passphrase-
+  // derived KEK. Present on vaults created or migrated under the envelope model;
+  // ABSENT on older vaults (where the key was derived straight from the
+  // passphrase) — those migrate on first unlock. Changing the passphrase re-wraps
+  // this without re-encrypting any data. See crypto.ts wrapVaultKey.
+  wrappedDEK?: CipherBlob;
 };
 
 export type StoredEntry = {
