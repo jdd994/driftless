@@ -8,6 +8,7 @@ import { Capture } from "./components/Capture";
 import { Toolbar } from "./components/Toolbar";
 import { TagBar } from "./components/TagBar";
 import { Stream } from "./components/Stream";
+import { OnThisDay } from "./components/OnThisDay";
 import { Timeline } from "./components/Timeline";
 import { StrandsView } from "./components/StrandsView";
 import { SharedView } from "./components/SharedView";
@@ -343,6 +344,7 @@ export default function App() {
 
       {view === "stream" && (
         <>
+          {!query && !tag && <OnThisDay entries={j.entries} />}
           <Toolbar
             query={query}
             onQuery={setQuery}
