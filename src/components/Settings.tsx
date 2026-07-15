@@ -23,6 +23,7 @@ type Props = {
   account: string | null;
   onCreateAccount: (email: string, password: string) => Promise<string | null>;
   onDisconnect: () => void;
+  onDeleteAccount: () => Promise<string | null>;
   onSyncNow: () => void;
 };
 
@@ -30,13 +31,16 @@ function AccountSection({
   account,
   onCreateAccount,
   onDisconnect,
+  onDeleteAccount,
   onSyncNow,
-}: Pick<Props, "account" | "onCreateAccount" | "onDisconnect" | "onSyncNow">) {
+}: Pick<Props, "account" | "onCreateAccount" | "onDisconnect" | "onDeleteAccount" | "onSyncNow">) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   async function create() {
     setError(null);
@@ -69,6 +73,42 @@ function AccountSection({
           <button className="ghost-btn" onClick={onDisconnect}>
             Disconnect this device
           </button>
+        </div>
+
+        {/* Deleting the account is quiet and deliberate — below the everyday
+            controls, behind a confirm. It removes only the copy on the server;
+            the journal on this device is untouched. */}
+        <div className="danger-zone">
+          {deleteErr ? <p className="lock-error">{deleteErr}</p> : null}
+          {confirmDelete ? (
+            <>
+              <p className="account-hint">
+                This permanently removes your synced copy from the server. Everything on{" "}
+                <b>this device</b> stays exactly as it is. It can't be undone.
+              </p>
+              <div className="edit-foot">
+                <button className="ghost-btn" onClick={() => { setConfirmDelete(false); setDeleteErr(null); }}>
+                  Keep it
+                </button>
+                <button
+                  className="ghost-btn danger"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    const err = await onDeleteAccount();
+                    setBusy(false);
+                    if (err) setDeleteErr(err);
+                  }}
+                >
+                  {busy ? "Deleting…" : "Delete from server"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <button className="linklike danger" onClick={() => setConfirmDelete(true)}>
+              Delete this account from the server
+            </button>
+          )}
         </div>
       </section>
     );
@@ -132,6 +172,7 @@ export function Settings({
   account,
   onCreateAccount,
   onDisconnect,
+  onDeleteAccount,
   onSyncNow,
 }: Props) {
   useEffect(() => {
@@ -200,6 +241,7 @@ export function Settings({
             account={account}
             onCreateAccount={onCreateAccount}
             onDisconnect={onDisconnect}
+            onDeleteAccount={onDeleteAccount}
             onSyncNow={onSyncNow}
           />
         </div>

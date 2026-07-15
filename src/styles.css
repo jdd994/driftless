@@ -806,6 +806,19 @@ kbd {
 }
 .account-hint { font-size: 12px; color: var(--ink-faint); margin: 10px 0 0; }
 .account-form { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+
+/* Deleting a synced account — quiet, below the everyday controls, behind a
+   confirm. Removes only the server copy; the device keeps its journal. */
+.danger-zone { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.linklike {
+  border: none; background: none; padding: 0; font: inherit; cursor: pointer;
+  color: var(--amber); text-decoration: underline; text-underline-offset: 2px;
+}
+.linklike:hover { color: var(--ink); }
+.linklike.danger { color: var(--danger); font-size: 12px; text-decoration: none; }
+.linklike.danger:hover { color: var(--ink); text-decoration: underline; }
+.ghost-btn.danger { color: var(--danger); border-color: transparent; }
+.ghost-btn.danger:hover { color: var(--ink); border-color: var(--danger); }
 .account-form .anchor-input { border-color: var(--line); }
 .signin-form { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 

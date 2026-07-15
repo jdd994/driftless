@@ -95,6 +95,14 @@ export function fetchMe(token: string): Promise<{ userId: string }> {
   return req("/me", { token });
 }
 
+// Permanently delete the account and everything the server holds for it —
+// private entries, the vault record, photos in R2, and shared-strand
+// membership. Local data on the device is untouched. The server refuses (409)
+// if the user still owns a shared strand that other people are in. Irreversible.
+export function deleteAccount(token: string): Promise<{ ok: boolean }> {
+  return req("/me", { method: "DELETE", token });
+}
+
 // Public-key directory (for future sharing).
 export function fetchKeys(
   token: string,

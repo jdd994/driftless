@@ -459,6 +459,7 @@ export default function App() {
           account={j.account}
           onCreateAccount={j.connectCreateAccount}
           onDisconnect={j.disconnectAccount}
+          onDeleteAccount={j.deleteAccount}
           onSyncNow={j.syncNow}
         />
       )}

@@ -126,6 +126,73 @@ app.get("/health", (c) => c.json({ ok: true, service: "driftless-server" }));
 // Who am I? (the token's user id) — used to mark authorship of shared pieces.
 app.get("/me", requireAuth, (c) => c.json({ userId: c.get("userId") }));
 
+// Delete every R2 object under a prefix, paginating through the listing. Used to
+// sweep a user's private photos (u/<userId>/) or a strand's photos (s/<id>/).
+async function deleteR2Prefix(bucket: R2Bucket, prefix: string): Promise<void> {
+  let cursor: string | undefined;
+  do {
+    const listed = await bucket.list({ prefix, cursor });
+    const keys = listed.objects.map((o) => o.key);
+    if (keys.length) await bucket.delete(keys);
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+}
+
+// Delete the account and everything the server holds for it. The passphrase was
+// never here, so this is the whole server-side footprint: private objects, the
+// vault record, private photos in R2, and shared-strand membership. Local data
+// on the device is untouched — this only clears the cloud copy.
+//
+// It refuses to run while the user still OWNS a shared strand that other people
+// are in: deleting that would quietly destroy someone else's copy of a shared
+// memory. They must hand it over or remove the other members first. Strands they
+// own alone are deleted in full.
+app.delete("/me", requireAuth, async (c) => {
+  const userId = c.get("userId");
+
+  const owned = (await c.env.DB.prepare("SELECT strand_id FROM shared_strands WHERE owner_id = ?")
+    .bind(userId).all<{ strand_id: string }>()).results ?? [];
+
+  const blocking: string[] = [];
+  const soloOwned: string[] = [];
+  for (const { strand_id } of owned) {
+    const row = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM strand_members WHERE strand_id = ? AND user_id <> ?")
+      .bind(strand_id, userId).first<{ n: number }>();
+    ((row?.n ?? 0) > 0 ? blocking : soloOwned).push(strand_id);
+  }
+  if (blocking.length > 0) {
+    return c.json({
+      error: "You still own shared strand(s) that other people are in. Hand them over or remove the other members first, so nobody else loses a shared strand.",
+      strands: blocking,
+    }, 409);
+  }
+
+  // Strands they own alone: delete the photos, then every DB row.
+  for (const strandId of soloOwned) {
+    await deleteR2Prefix(c.env.MEDIA, `s/${strandId}/`);
+    await c.env.DB.batch([
+      c.env.DB.prepare("DELETE FROM shared_objects WHERE strand_id = ?").bind(strandId),
+      c.env.DB.prepare("DELETE FROM strand_invites WHERE strand_id = ?").bind(strandId),
+      c.env.DB.prepare("DELETE FROM strand_members WHERE strand_id = ?").bind(strandId),
+      c.env.DB.prepare("DELETE FROM shared_strands WHERE strand_id = ?").bind(strandId),
+    ]);
+  }
+
+  // Their private photos, then the private DB footprint + any lingering
+  // memberships in other people's strands.
+  await deleteR2Prefix(c.env.MEDIA, `u/${userId}/`);
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM strand_members WHERE user_id = ?").bind(userId),
+    c.env.DB.prepare("DELETE FROM objects WHERE user_id = ?").bind(userId),
+    c.env.DB.prepare("DELETE FROM vaults WHERE user_id = ?").bind(userId),
+    c.env.DB.prepare("DELETE FROM user_usage WHERE user_id = ?").bind(userId),
+    c.env.DB.prepare("UPDATE feedback SET user_id = NULL WHERE user_id = ?").bind(userId),
+    c.env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId),
+  ]);
+
+  return c.json({ ok: true });
+});
+
 // ---- Media (M1: personal photos) -----------------------------------------
 // R2 stores an opaque blob: iv||ciphertext, already encrypted on the device
 // with the vault key. Keyed by owner; only the owner can read it back. Type is

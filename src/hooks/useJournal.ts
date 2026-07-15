@@ -77,6 +77,7 @@ import {
   createInviteLink as apiCreateInviteLink,
   joinClaim,
   joinFinish,
+  deleteAccount as apiDeleteAccount,
   downloadMedia,
   deleteMediaRemote,
   uploadSharedMedia,
@@ -1451,6 +1452,22 @@ export function useJournal() {
     await saveSyncState({ id: "state", cursor: 0 });
   }, []);
 
+  // Permanently delete the account and every blob the server holds, then
+  // disconnect this device. The journal on this device is untouched — only the
+  // cloud copy is removed. Returns an error message (e.g. the server's refusal
+  // when you still own a shared strand others are in), or null on success.
+  const deleteAccount = useCallback(async (): Promise<string | null> => {
+    const token = tokenRef.current;
+    if (!token) return null;
+    try {
+      await apiDeleteAccount(token);
+      await disconnectAccount();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "Couldn't delete the account.";
+    }
+  }, [disconnectAccount]);
+
   const clearSaveError = useCallback(() => setSaveError(null), []);
 
   return {
@@ -1490,6 +1507,7 @@ export function useJournal() {
     connectCreateAccount,
     connectSignIn,
     disconnectAccount,
+    deleteAccount,
     syncNow: runSync,
     sharedStrands,
     createSharedStrand,
