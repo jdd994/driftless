@@ -21,14 +21,22 @@ type AppContext = Context<{ Bindings: Env; Variables: Vars }>;
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
-app.use("*", (c, next) =>
-  cors({
-    origin: c.env.ALLOWED_ORIGIN || "*",
+// ALLOWED_ORIGIN is a comma-separated allowlist, so the app can live on more
+// than one origin at once — e.g. during a domain move (driftless-8nc.pages.dev →
+// driftless.page), both keep working, so nobody's sync breaks mid-migration.
+// Empty (dev) reflects any origin.
+app.use("*", (c, next) => {
+  const allowed = (c.env.ALLOWED_ORIGIN || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return cors({
+    origin: (origin) => (allowed.length === 0 ? "*" : allowed.includes(origin) ? origin : null),
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     maxAge: 86400,
-  })(c, next)
-);
+  })(c, next);
+});
 
 // Bearer-token auth. Sets `userId` on success.
 async function requireAuth(c: AppContext, next: Next) {

@@ -14,7 +14,8 @@ binding = "MEDIA"
 bucket_name = "driftless-media"
 
 [vars]
-# The Pages origin allowed to call this API (CORS). Add a custom domain here too
-# when you have one. TOKEN_SECRET is a *secret*, set separately:
+# Comma-separated CORS allowlist of origins allowed to call this API. Both the
+# old Pages URL and the new custom domain are listed so sync keeps working on
+# either during/after the domain move. TOKEN_SECRET is a *secret*, set separately:
 #   npx wrangler secret put TOKEN_SECRET
-ALLOWED_ORIGIN = "https://driftless-8nc.pages.dev"
+ALLOWED_ORIGIN = "https://driftless-8nc.pages.dev,https://driftless.page"
