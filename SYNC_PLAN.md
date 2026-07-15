@@ -1,10 +1,15 @@
 # Sync plan — Driftless
 
-Status: **Phases 1–3 done; Phase 4 (client wiring) next.** Backend: a tiny
-custom server on **Cloudflare Workers + D1**, live at
-`https://driftless-server.jdd994.workers.dev` (accounts, vault, key directory,
-and sync push/pull — all verified with curl). The client does **not** talk to it
-yet; that's Phase 4. This document is the build spec, edited as we learn.
+Status: **Sync is BUILT, deployed, and verified end-to-end (2026-07-14).**
+Phases 1–5 are done: client engine, account UI, media sync over R2, sharing S2,
+and a two-device bidirectional test passed (write on device A → appears on device
+B after sign-in + unlock; and back). Backend live at
+`https://driftless-server.jdd994.workers.dev`, auto-deploys from `main`.
+**Phase 6 (hardening) is the remaining work — see `HARDENING.md`.** Per-user
+storage quotas (the first Phase-6 item) are now added.
+
+> The phase checklist below is kept for history; the top status is the source of
+> truth. This document is the build spec, edited as we learn.
 
 > **Why sync is the gateway.** The longer-term vision (see the
 > "Sharing & family strands" appendix below, and the `sharing-family-vision`
@@ -172,10 +177,13 @@ later, move `updatedAt` to a logical per-record version counter and encrypt
    local-only keeps working untouched. Add server origin to CSP `connect-src`.
 5. **Key portability test.** New device → log in → fetch vault `salt` → enter
    passphrase → pull → decrypt. This is the acceptance test for the whole thing.
-6. **Hardening.** Rate limiting, token refresh/expiry, per-user storage cap,
-   privacy-preserving error logging (never entry content), tests, D1 backups.
-   Decide timestamp encryption. Optionally move sync into a custom SW for true
-   background/periodic sync.
+6. **Hardening (current).** See `HARDENING.md` for the full threat/cost model and
+   the prioritized checklist. Done so far: rate limiting (register/login/feedback),
+   size caps, **per-user storage quotas** (objects + media). Next: billing alerts,
+   Turnstile on signup, edge/WAF rate limiting, global signup circuit-breaker,
+   token rotation, shared-media quota, tombstone purge, privacy-preserving abuse
+   monitoring. Also still open: timestamp encryption decision; optional custom SW
+   for true background sync.
 
 ## Decisions (resolved 2026-06-30)
 
